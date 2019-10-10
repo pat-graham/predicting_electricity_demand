@@ -1,0 +1,36 @@
+---
+title: "Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Project
+
+```{r}
+
+# Read in data
+hourly_data = read.csv("P3S2_hourly_clean.csv")
+respondent_IDs = read.csv("Respondent IDs.csv")
+
+# Filter data for one respondent ID
+data = hourly_data %>% filter(respondent_id == 101)
+
+# Remove hour25
+data = hourly_data[-32]
+ts_data = ts(data, start = 2006, frequency = 365)
+
+# RULES
+# test data 20% of training
+# The test set should ideally be at least as large as the maximum forecast horizon required.
+
+# USEFUL FUNCTIONS
+# window() -> extraxcts data from a timepoint onwards
+# subsetting() -> extracts a subset of a time sries
+# ts() -> turns into time series data
+# autoplot() -> plots time series data
+# ggAcf -> autocorrelation
+
+```
