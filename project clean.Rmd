@@ -7,6 +7,17 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
 ```
 
-this is gay af
+```{r}
+P3S2_hourly_clean <- read.csv("data/P3S2_hourly_clean.csv")
+test <- P3S2_hourly_clean
+```
+
+```{r}
+test <- test %>% filter(respondent_id == 101) %>% select(everything(), -hour25)
+test <- test %>% gather(key, load, -c(respondent_id:timezone), -c(eia_code:dow))
+```
+
+
