@@ -1,0 +1,67 @@
+---
+title: "Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(smooth)
+```
+
+# Project
+
+```{r}
+
+# Read in data. Data sourced from https://www.ferc.gov/docs-filing/forms/form-714/data.asp?fbclid=IwAR3edmimq4-j8_wzt51Sj-uaSkt8__BZE36opiitB3AlN_f5TahcYfeSPJs
+data = read.csv("data/P3S2_hourly_clean.csv")
+respondents = unique(hourly_data$respondent_id)
+
+# Remove hour25
+data = hourly_data[-32] # remove hour25
+
+# Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
+unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
+m = 1
+n = 1
+for (r in respondents)
+{
+  current_data = filter(data, respondent_id == r)
+  
+  for(j in 1:nrow(current_data))
+  {
+    for(i in 8:31)
+    {
+      unpacked_data[n,m] = current_data[j,i] 
+      n = n + 1
+    }
+  }
+  n = 1
+  m  = m + 1
+}
+
+unpacked_data = as.data.frame(unpacked_data)
+
+colnames(unpacked_data) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R211", "R232", "R233", "R234", "R235", "R236", "R240", "R243", "R251", "R253", "R263", "R267", "R275")
+time_span =  seq(from = as.POSIXct("2006-1-1 0:00", tz="UTC"), to = as.POSIXct("2017-12-31 23:00", tz="UTC"), by="hour")  
+rownames(unpacked_data) = time_span
+
+# Respondent 253 does not have complete data, so remove
+unpacked_data = select(unpacked_data, -R253)
+
+aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
+
+ggplot() + geom_line(aes(x = time_span, y = aggregate_data)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
+
+# RULES
+# test data 20% of training
+# The test set should ideally be at least as large as the maximum forecast horizon required.
+
+# USEFUL FUNCTIONS
+# window() -> extraxcts data from a timepoint onwards
+# subsetting() -> extracts a subset of a time sries
+# ts() -> turns into time series data
+# autoplot() -> plots time series data
+# ggAcf -> autocorrelation
+
+```
