@@ -7,6 +7,9 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(smooth)
+library(caret)
+library(keras)
+library(tseries)
 ```
 
 # Project
@@ -15,10 +18,10 @@ library(smooth)
 
 # Read in data. Data sourced from https://www.ferc.gov/docs-filing/forms/form-714/data.asp?fbclid=IwAR3edmimq4-j8_wzt51Sj-uaSkt8__BZE36opiitB3AlN_f5TahcYfeSPJs
 data = read.csv("data/P3S2_hourly_clean.csv")
-respondents = unique(hourly_data$respondent_id)
+respondents = unique(data$respondent_id)
 
 # Remove hour25
-data = hourly_data[-32] # remove hour25
+data = data[-32] # remove hour25
 
 # Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
 unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
@@ -52,6 +55,21 @@ unpacked_data = select(unpacked_data, -R253)
 aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
 
 ggplot() + geom_line(aes(x = time_span, y = aggregate_data)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
+
+### Investigating data
+aggregate_data <- ts(aggregate_data, start = 2006-1-1, frequency = 24) #make data into time series for R
+aggregate_components <- decompose(aggregate_data) #decompose the data
+plot(aggregate_components) # plot the decomposition
+
+### Further investigation for ARIMA Modelling
+adf.test(diff(log(aggregate_data)), alternative="stationary", k=0) #stationary enough for ARIMA Modelling (taking the log removed unequal variance, taking the difference removes trend) Note with Keras we can model that though
+acf(diff(log(aggregate_data))) #still lags...
+pacf(diff(log(aggregate_data))) #pcf is much better
+
+#fitting a bad ARIMA model
+(fit <- arima(diff(log(aggregate_data)), c(0, 1, 1), seasonal = list(order = c(0, 1, 1), period = 24))) #need to do a grid search to find the best AIC for  (p,d,q)
+pred <- predict(fit, n.ahead = 10*24)
+
 
 # RULES
 # test data 20% of training
