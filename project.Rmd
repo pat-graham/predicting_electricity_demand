@@ -57,9 +57,12 @@ aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
 ggplot() + geom_line(aes(x = time_span, y = aggregate_data)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
 
 ### Investigating data
-aggregate_data <- ts(aggregate_data, start = 2006-1-1, frequency = 24) #make data into time series for R
+aggregate_data <- ts(aggregate_data, start = 2006-1-1, frequency = 24)
+aggregate_data2 <- ts(diff(log(aggregate_data)), start = 2006-1-1, frequency = 24)#make data into time series for R
 aggregate_components <- decompose(aggregate_data) #decompose the data
+aggregate_components2 <- decompose(aggregate_data2)
 plot(aggregate_components) # plot the decomposition
+plot(aggregate_components2)
 
 ### Further investigation for ARIMA Modelling
 adf.test(diff(log(aggregate_data)), alternative="stationary", k=0) #stationary enough for ARIMA Modelling (taking the log removed unequal variance, taking the difference removes trend) Note with Keras we can model that though
