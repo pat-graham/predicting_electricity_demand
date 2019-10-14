@@ -112,6 +112,11 @@ aggregate_data <- aggregate_data %>% as_tsibble()
 
 autoplot(aggregate_data)
 
-model <- aggregate_data %>% model(ARIMA(load, stepwise = FALSE, approximation = FALSE))
+model <- aggregate_data %>% model(ARIMA(load))
+report(model)
+
+model_fc <- model %>% forecast(h=8760)
+
+model_fc %>% autoplot(aggregate_data)
 ```
 
