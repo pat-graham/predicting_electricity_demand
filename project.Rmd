@@ -84,27 +84,28 @@ ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], colo
 
 # Training/test split + network memory
 split = 2/3
-winSize = 10
+winSize = 24 # 1 days memory
+split_point = length(aggregate_demand)*split # last point where training data has a labelled prediction
 
 # Manually Generate Training Data indexes
-train_size = length(aggregate_demand)*split - 10
+train_size = length(aggregate_demand)*split - winSize
 train_data_index = matrix(ncol = winSize, nrow = train_size)
 train_label_index = vector(mode = "numeric", length = train_size)
 for (i in seq(from = 1, to = train_size, by = 1))
 {
-  train_data_index[i,] = seq(from = i, to = i + 9, by = 1)
-  train_label_index[i] = i + 10
+  train_data_index[i,] = seq(from = i, to = i + winSize-1, by = 1)
+  train_label_index[i] = i + winSize
 }
 
 # Manual Generate test data indexes
-offset = length(aggregate_demand)*split - 9
+offset = length(aggregate_demand)*split - winSize
 test_size = length(aggregate_demand)*(1 - split) - 1
 test_data_index = matrix(ncol = winSize, nrow = test_size)
 test_label_index = vector(mode = "numeric", length = test_size)
 for (i in seq(from = 1, to = test_size, by = 1))
 {
-  test_data_index[i,] = seq(from = offset + i, to = offset + i + 9, by = 1)
-  test_label_index[i] = offset + i + 10
+  test_data_index[i,] = seq(from = offset + i, to = offset + i + winSize-1, by = 1)
+  test_label_index[i] = offset + i + winSize
 }
 
 # Apply to create train part of split
@@ -155,10 +156,23 @@ history = model %>% fit(
   verbose = 0
 )
 
+# Plot the model fitting performance
 plot(history, metrics = "mean_absolute_error", smooth = FALSE)
   
+# predict model on test set
 test_preds = model %>% predict(test_data)
 
-ggplot() + geom_line(aes(x = time_span[test_label_index], y = test_preds, color = "forecast")) + geom_line(aes(x = time_span[train_label_index], y = aggregate_demand[train_label_index], color = "train"))  + geom_line(aes(x = time_span[test_label_index], y = test_label, color = "actual"))
+# Plot results on large scale
+ggplot() + geom_line(aes(x = time_span[test_label_index], y = test_preds, color = "forecast")) + geom_line(aes(x = time_span[train_label_index], y = aggregate_demand[train_label_index], color = "train"))  + geom_line(aes(x = time_span[test_label_index], y = test_label, color = "actual")) + xlab("Year") + ylab("Electricity Demand (GW)") + ggtitle("Results of Neural Network Forecast")
+
+# Define an inspection interval for graph close to split point
+look_back = 24*7
+look_forward = 24*16 #24 hours * number of days
+ggplot() + 
+  geom_line(aes(x = time_span[tail(train_label_index,look_back)], y = tail(train_label,look_back),  colour = "train")) +
+  geom_line(aes(x = time_span[head(test_label_index,look_forward)], y =  head(test_label, look_forward), colour = "actual")) +
+  geom_line(aes(x = time_span[head(test_label_index,look_forward)], y = head(test_preds, look_forward), colour = "predictions" )) + 
+  xlab("Month") + ylab("Electricity Demand (GW)") + ggtitle("Results of Neural Network Forecast - Close Up")
+
 
 ```
