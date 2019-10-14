@@ -6,8 +6,8 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(smooth)
 library(forecast)
+library(caret)
 ```
 
 # Project
@@ -16,10 +16,10 @@ library(forecast)
 
 # Read in data. Data sourced from https://www.ferc.gov/docs-filing/forms/form-714/data.asp?fbclid=IwAR3edmimq4-j8_wzt51Sj-uaSkt8__BZE36opiitB3AlN_f5TahcYfeSPJs
 data = read.csv("data/P3S2_hourly_clean.csv")
-respondents = unique(hourly_data$respondent_id)
+respondents = unique(data$respondent_id)
 
 # Remove hour25
-data = hourly_data[-32] # remove hour25
+data = data[-32] # remove hour25
 
 # Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
 unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
@@ -55,34 +55,110 @@ unpacked_data = select(unpacked_data, -R253)
 # Compute aggregate electricity demand
 aggregate_demand = rowSums(unpacked_data/1e3) # data in Gigawatts
 
-# Split into training and test
-offset = 24*7
-train = seq(2/3*length(aggregate_demand) - offset, 2/3*length(aggregate_demand), by = 1)
-test = seq(2/3*length(aggregate_demand) + 1, 2/3*length(aggregate_demand) + offset, by = 1)
+# ============================================== TIME SERIES MODEL ============================================== 
 
-# Fit time series benchmark model
-fit = auto.arima(aggregate_demand[train])
+# Split into training and test
+offset = 24*31
+train = seq(1/3*length(aggregate_demand) - offset, 1/3*length(aggregate_demand), by = 1)
+test = seq(1/3*length(aggregate_demand), 1/3*length(aggregate_demand) + offset, by = 1)
+
+# fit1 time series benchmark model
+fit1 = auto.arima(aggregate_demand[train], d = 1)
+fit2 = ets(aggregate_demand[train], model = "ANN")
 
 # Forecast on test set
-demand_forecast = forecast(fit, h = length(test))
+demand_forecast1 = forecast(fit1, h = length(test))
+demand_forecast2 = forecast(fit2, h = length(test))
 
-ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))
+ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast1$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast1$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast1$lower[,2], color = "lower")) 
 
-ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual"))
+ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast2$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast2$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast2$lower[,2], color = "lower")) 
 
-#ggplot() + geom_line(aes(x = time_span, y = aggregate_demand)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
+ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual")) 
 
-#split = createTimeSlices(y = aggregate_demand, initialWindow = 10, horizon = 10)
+# Need to figure out why this is trash ^
 
-# RULES
-# test data 20% of training
-# The test set should ideally be at least as large as the maximum forecast horizon required.
+# ============================================== SEQUENTIAL NEURAL NETWORK ============================================== 
 
-# USEFUL FUNCTIONS
-# window() -> extraxcts data from a timepoint onwards
-# subsetting() -> extracts a subset of a time sries
-# ts() -> turns into time series data
-# autoplot() -> plots time series data
-# ggAcf -> autocorrelation
+# Code here takes inpsiration from https://keras.rstudio.com/articles/tutorial_basic_regression.html
+
+# Training/test split + network memory
+split = 2/3
+winSize = 10
+
+# Manually Generate Training Data indexes
+train_size = length(aggregate_demand)*split - 10
+train_data_index = matrix(ncol = winSize, nrow = train_size)
+train_label_index = vector(mode = "numeric", length = train_size)
+for (i in seq(from = 1, to = train_size, by = 1))
+{
+  train_data_index[i,] = seq(from = i, to = i + 9, by = 1)
+  train_label_index[i] = i + 10
+}
+
+# Manual Generate test data indexes
+offset = length(aggregate_demand)*split - 9
+test_size = length(aggregate_demand)*(1 - split) - 1
+test_data_index = matrix(ncol = winSize, nrow = test_size)
+test_label_index = vector(mode = "numeric", length = test_size)
+for (i in seq(from = 1, to = test_size, by = 1))
+{
+  test_data_index[i,] = seq(from = offset + i, to = offset + i + 9, by = 1)
+  test_label_index[i] = offset + i + 10
+}
+
+# Apply to create train part of split
+iter = length(train_label_index)
+train_data = matrix(ncol = winSize, nrow = iter)
+train_label = vector(mode = "numeric", length = iter)
+for (i in seq(from = 1, to = iter, by = 1))
+{
+  train_data[i,] = aggregate_demand[train_data_index[i,]]
+  train_label[i] = aggregate_demand[train_label_index[i]]
+}
+
+# Apply to create test part of split
+iter = length(test_label_index)
+test_data = matrix(ncol = winSize, nrow = iter)
+test_label = vector(mode = "numeric", length = iter)
+for (i in seq(from = 1, to = iter, by = 1))
+{
+  test_data[i,] = aggregate_demand[test_data_index[i,]]
+  test_label[i] = aggregate_demand[test_label_index[i]]
+}
+
+# Standardise input data for neural network
+train_data <- scale(train_data) 
+col_means_train <- attr(train_data, "scaled:center") 
+col_stddevs_train <- attr(train_data, "scaled:scale")
+test_data <- scale(test_data, center = col_means_train, scale = col_stddevs_train)
+
+# Create neural network
+model = keras_model_sequential() 
+model %>%
+    layer_dense(units = 64, activation = "relu",
+                input_shape = winSize) %>%
+    layer_dense(units = 64, activation = "relu") %>%
+    layer_dense(units = 1)
+  
+model %>% compile(
+    loss = "mse",
+    optimizer = optimizer_rmsprop(),
+    metrics = list("mean_absolute_error")
+  )
+
+# Train neural network
+history = model %>% fit(
+  train_data, train_label,
+  epochs = 20, 
+  validation_split = 0.2,
+  verbose = 0
+)
+
+plot(history, metrics = "mean_absolute_error", smooth = FALSE)
+  
+test_preds = model %>% predict(test_data)
+
+ggplot() + geom_line(aes(x = time_span[test_label_index], y = test_preds, color = "forecast")) + geom_line(aes(x = time_span[train_label_index], y = aggregate_demand[train_label_index], color = "train"))  + geom_line(aes(x = time_span[test_label_index], y = test_label, color = "actual"))
 
 ```
