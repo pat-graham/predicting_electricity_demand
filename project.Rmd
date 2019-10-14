@@ -7,6 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(smooth)
+library(forecast)
 ```
 
 # Project
@@ -40,8 +41,10 @@ for (r in respondents)
   m  = m + 1
 }
 
+# Convert to data frame
 unpacked_data = as.data.frame(unpacked_data)
 
+# Rename rows and columns
 colnames(unpacked_data) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R211", "R232", "R233", "R234", "R235", "R236", "R240", "R243", "R251", "R253", "R263", "R267", "R275")
 time_span =  seq(from = as.POSIXct("2006-1-1 0:00", tz="UTC"), to = as.POSIXct("2017-12-31 23:00", tz="UTC"), by="hour")  
 rownames(unpacked_data) = time_span
@@ -49,9 +52,26 @@ rownames(unpacked_data) = time_span
 # Respondent 253 does not have complete data, so remove
 unpacked_data = select(unpacked_data, -R253)
 
-aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
+# Compute aggregate electricity demand
+aggregate_demand = rowSums(unpacked_data/1e3) # data in Gigawatts
 
-ggplot() + geom_line(aes(x = time_span, y = aggregate_data)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
+# Split into training and test
+train = seq(1, 2/3*length(aggregate_demand), by = 1)
+test = seq(2/3*length(aggregate_demand) + 1, length(aggregate_demand), by = 1)
+
+# Fit time series benchmark model
+fit = auto.arima(aggregate_demand[train])
+
+# Forecast on test set
+demand_forecast = forecast(fit, h = length(test))
+
+ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))
+
+ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual"))
+
+#ggplot() + geom_line(aes(x = time_span, y = aggregate_demand)) + xlab("Year") + ylab("Demand (GW)") + ggtitle("Aggregate US Electricity Demand") + theme(plot.title = element_text(hjust = 0.5))
+
+#split = createTimeSlices(y = aggregate_demand, initialWindow = 10, horizon = 10)
 
 # RULES
 # test data 20% of training
