@@ -9,11 +9,15 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
+library(fable)
+library(tsibble)
+
 ```
 
 ```{r}
 P3S2_hourly_clean <- read.csv("data/P3S2_hourly_clean.csv")
-test <- P3S2_hourly_clean
+data <- P3S2_hourly_clean
+respondents = unique(data$respondent_id)
 ```
 
 ```{r}
@@ -37,4 +41,77 @@ test_101[1,]
 test %>% ggplot(aes(x=plan_date, y=load, colour=as.factor(report_yr))) + geom_line(group=1) + facet_wrap(~respondent_id)
 ```
 
+
+```{r}
+#cheers will
+# Remove hour25
+data = data[-32] # remove hour25
+
+# Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
+unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
+m = 1
+n = 1
+for (r in respondents)
+{
+  current_data = filter(data, respondent_id == r)
+  
+  for(j in 1:nrow(current_data))
+  {
+    for(i in 8:31)
+    {
+      unpacked_data[n,m] = current_data[j,i] 
+      n = n + 1
+    }
+  }
+  n = 1
+  m  = m + 1
+}
+
+unpacked_data = as.data.frame(unpacked_data)
+
+colnames(unpacked_data) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R211", "R232", "R233", "R234", "R235", "R236", "R240", "R243", "R251", "R253", "R263", "R267", "R275")
+time_span =  seq(from = as.POSIXct("2006-1-1 0:00", tz="UTC"), to = as.POSIXct("2017-12-31 23:00", tz="UTC"), by="hour")  
+rownames(unpacked_data) = time_span
+
+# Respondent 253 does not have complete data, so remove
+unpacked_data = select(unpacked_data, -R253)
+
+aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
+
+```
+
+```{r}
+aggregate_data <- data.frame(aggregate_data)
+aggregate_data <- rownames_to_column(aggregate_data, "Time")
+aggregate_data <- aggregate_data %>% mutate(Time = as.Date(Time))
+
+aggregate_data_h1 <- aggregate_data[seq(1,nrow(aggregate_data),24),] %>% as_tsibble()
+autoplot(aggregate_data_h1)
+
+arima_h1 <- aggregate_data_h1 %>% model(ARIMA(aggregate_data, stepwise=FALSE, approximation=FALSE))
+report(arima_h1)
+
+arima_h1_fc <- arima_h1 %>% forecast(h=365)
+
+arima_h1_fc %>% autoplot(aggregate_data_h1)
+
+```
+
+```{r}
+aggregate_data_og <- aggregate_data
+
+
+aggregate_data <- data.frame(load=aggregate_data_og)
+aggregate_data <- rownames_to_column(aggregate_data, "Time")
+aggregate_data <- aggregate_data %>% mutate(Time = as.POSIXct(Time,format="%Y-%m-%d %H:%M:%S",tz="Etc/GMT+8"))
+
+#aggregate_data %>% filter(is.na(Time))
+
+
+aggregate_data <- aggregate_data %>% as_tsibble()
+
+autoplot(aggregate_data)
+
+model <- aggregate_data %>% model(ARIMA(load, stepwise = FALSE, approximation = FALSE))
+```
 
