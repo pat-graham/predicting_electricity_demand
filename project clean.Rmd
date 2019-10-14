@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(lubridate)
 ```
 
 ```{r}
@@ -18,6 +19,22 @@ test <- P3S2_hourly_clean
 ```{r}
 test <- test %>% filter(respondent_id == 101) %>% select(everything(), -hour25)
 test <- test %>% gather(key, load, -c(respondent_id:timezone), -c(eia_code:dow))
+```
+
+
+```{r}
+test_101 <- test %>% filter(key == "hour01")
+
+test_101 %>% ggplot(aes(x=plan_date, y=load, colour=as.factor(report_yr))) + geom_line(group=1) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+test_101[1,]
+```
+
+
+```{r}
+test %>% ggplot(aes(x=plan_date, y=load, colour=as.factor(report_yr))) + geom_line(group=1) + facet_wrap(~respondent_id)
 ```
 
 
