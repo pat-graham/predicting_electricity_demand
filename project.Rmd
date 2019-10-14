@@ -56,8 +56,9 @@ unpacked_data = select(unpacked_data, -R253)
 aggregate_demand = rowSums(unpacked_data/1e3) # data in Gigawatts
 
 # Split into training and test
-train = seq(1, 2/3*length(aggregate_demand), by = 1)
-test = seq(2/3*length(aggregate_demand) + 1, length(aggregate_demand), by = 1)
+offset = 24*7
+train = seq(2/3*length(aggregate_demand) - offset, 2/3*length(aggregate_demand), by = 1)
+test = seq(2/3*length(aggregate_demand) + 1, 2/3*length(aggregate_demand) + offset, by = 1)
 
 # Fit time series benchmark model
 fit = auto.arima(aggregate_demand[train])
