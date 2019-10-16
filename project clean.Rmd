@@ -11,6 +11,8 @@ library(tidyverse)
 library(lubridate)
 library(fable)
 library(tsibble)
+library(keras)
+library(tensorflow)
 
 ```
 
@@ -118,5 +120,100 @@ report(model)
 model_fc <- model %>% forecast(h=8760)
 
 model_fc %>% autoplot(aggregate_data)
+```
+
+```{r}
+generator <- function(data, lookback, delay, min_index, max_index,
+                      shuffle = FALSE, batch_size = 128, step = 6) {
+  if (is.null(max_index))
+    max_index <- nrow(data) - delay - 1
+  i <- min_index + lookback
+  function() {
+    if (shuffle) {
+      rows <- sample(c((min_index+lookback):max_index), size = batch_size)
+    } else {
+      if (i + batch_size >= max_index)
+        i <<- min_index + lookback
+      rows <- c(i:min(i+batch_size-1, max_index))
+      i <<- i + length(rows)
+    }
+
+    samples <- array(0, dim = c(length(rows),
+                                lookback / step,
+                                dim(data)[[-1]]))
+    targets <- array(0, dim = c(length(rows)))
+                      
+    for (j in 1:length(rows)) {
+      indices <- seq(rows[[j]] - lookback, rows[[j]]-1,
+                     length.out = dim(samples)[[2]])
+      samples[j,,] <- data[indices,]
+      targets[[j]] <- data[rows[[j]] + delay,2]
+    }           
+    list(samples, targets)
+  }
+}
+```
+
+```{r}
+loadvalue <- aggregate_data$load %>% as.matrix()
+
+lookback <- 8760
+step <- 24
+delay <- 8760
+batch_size <- 256
+
+train_gen <- generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 1,
+  max_index = 100000,
+  shuffle = TRUE,
+  step = step, 
+  batch_size = batch_size
+)
+
+val_gen = generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 100001,
+  max_index = 150000,
+  step = step,
+  batch_size = batch_size
+)
+
+test_gen <- generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 150001,
+  max_index = NULL,
+  step = step,
+  batch_size = batch_size
+)
+```
+
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_flatten(input_shape = c(lookback / step, dim(data)[-1])) %>% 
+  layer_dense(units = 32, activation = "relu") %>% 
+  layer_dense(units = 1)
+
+
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "mae"
+)
+
+
+history <- model %>% fit_generator(
+  train_gen,
+  steps_per_epoch = 500,
+  epochs = 20,
+  validation_data = val_gen,
+  validation_steps = val_steps
+)
 ```
 
