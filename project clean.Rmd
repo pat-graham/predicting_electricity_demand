@@ -195,9 +195,9 @@ test_gen <- generator(
 ```
 
 ```{r}
-train <- loadvalue[1:70128,]
-val <- loadvalue[70129:87661,]
-test <- loadvalue[87662:105192,]
+train <- loadvalue[1:70128,] %>% as.matrix()
+val <- loadvalue[70129:87661,] %>% as.matrix()
+test <- loadvalue[87662:105192,] %>% as.matrix()
 
 val_steps <- 8760
 test_steps <- (nrow(data) - 150001 - lookback) / batch_size
