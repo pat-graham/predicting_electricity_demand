@@ -194,10 +194,19 @@ test_gen <- generator(
 )
 ```
 
+```{r}
+train <- loadvalue[1:70128,]
+val <- loadvalue[70129:87661,]
+test <- loadvalue[87662:105192,]
+
+val_steps <- 8760
+test_steps <- (nrow(data) - 150001 - lookback) / batch_size
+```
+
 
 ```{r}
 model <- keras_model_sequential() %>% 
-  layer_flatten(input_shape = c(lookback / step, dim(data)[-1])) %>% 
+  layer_dense(units = 32, input_shape = c(8760)) %>% 
   layer_dense(units = 32, activation = "relu") %>% 
   layer_dense(units = 1)
 
@@ -209,10 +218,10 @@ model %>% compile(
 
 
 history <- model %>% fit_generator(
-  train_gen,
+  train,
   steps_per_epoch = 500,
   epochs = 20,
-  validation_data = val_gen,
+  validation_data = val,
   validation_steps = val_steps
 )
 ```
