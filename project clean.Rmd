@@ -112,14 +112,14 @@ aggregate_data <- aggregate_data %>% mutate(Time = as.POSIXct(Time,format="%Y-%m
 
 aggregate_data <- aggregate_data %>% as_tsibble()
 
-autoplot(aggregate_data)
+#autoplot(aggregate_data)
 
-model <- aggregate_data %>% model(ARIMA(load))
-report(model)
+#model <- aggregate_data %>% model(ARIMA(load))
+#report(model)
 
-model_fc <- model %>% forecast(h=8760)
+#model_fc <- model %>% forecast(h=8760)
 
-model_fc %>% autoplot(aggregate_data)
+#model_fc %>% autoplot(aggregate_data)
 ```
 
 ```{r}
@@ -206,7 +206,7 @@ test_steps <- (nrow(data) - 150001 - lookback) / batch_size
 
 ```{r}
 model <- keras_model_sequential() %>% 
-  layer_dense(units = 32, input_shape = c(8760)) %>% 
+  layer_dense(units = 32, input_shape = NULL) %>% 
   layer_dense(units = 32, activation = "relu") %>% 
   layer_dense(units = 1)
 
@@ -217,12 +217,17 @@ model %>% compile(
 )
 
 
-history <- model %>% fit_generator(
+history <- model %>% fit(
   train,
   steps_per_epoch = 500,
   epochs = 20,
   validation_data = val,
-  validation_steps = val_steps
+  batch_size = 32
 )
+```
+
+
+```{r}
+
 ```
 
