@@ -228,6 +228,64 @@ history <- model %>% fit(
 
 
 ```{r}
+aggregate_data_mat <- as.matrix(aggregate_data)
+generator <- timeseries_generator(loadvalue, targets = loadvalue, length=24, batch_size=8)
+for (i in 1:length(generator)) {
+  print(generator[i])
+}
+
+
+smp_size <- (2/3) * nrow(aggregate_data)
+
+
+aggregate_data_mat <- aggregate_data_og[1:smp_size]#as.matrix(aggregate_data)
+aggregate_data_mat_test <- aggregate_data_og[((smp_size+1):105192)]
+
+generator <- timeseries_generator(aggregate_data_mat, targets = aggregate_data_mat, length=24, batch_size=100)
+for (i in 1:length(generator)) {
+  print(generator[i])
+}
+
+test_generator <- timeseries_generator(aggregate_data_mat_test, targets = aggregate_data_mat_test, length=24, batch_size=8)
+```
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 32, activation= "relu") %>% 
+  layer_dense(units = 1)
+
+
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "mae"
+)
+
+model %>% fit_generator(generator, 
+                        steps_per_epoch = 8, 
+                        epochs=30,
+                        verbose=1)
+
+predict_generator(model, test_generator, steps=8)
+
+```
+
+#dealing with tzs
+
+```{r}
+#filtering for each of the respondents.
+
+respondent_data_list <- vector("list", 24)
+
+for(i in 1:24){
+  respondent_data_list[[i]] = data %>% filter(respondent_id == respondents[i])
+}
+
+respondent_101 <- respondent_data_list[[1]] %>% 
+  select(everything(), -hour25) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_101 <-  respondent_101[order(respondent_101$row_num, respondent_101$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
 ```
 
