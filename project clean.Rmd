@@ -13,6 +13,7 @@ library(fable)
 library(tsibble)
 library(keras)
 library(tensorflow)
+library(purrr)
 
 ```
 
@@ -281,11 +282,241 @@ for(i in 1:24){
 }
 
 respondent_101 <- respondent_data_list[[1]] %>% 
-  select(everything(), -hour25) %>% 
+  select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
 
 respondent_101 <-  respondent_101[order(respondent_101$row_num, respondent_101$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
+```
+
+```{r}
+respondent_118 <- respondent_data_list[[2]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_118 <-  respondent_118[order(respondent_118$row_num, respondent_118$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+
+respondent_157 <- respondent_data_list[[3]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_157 <-  respondent_157[order(respondent_157$row_num, respondent_157$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_160 <- respondent_data_list[[4]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_160 <-  respondent_160[order(respondent_160$row_num, respondent_160$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
+
+respondent_171 <- respondent_data_list[[5]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_171 <-  respondent_171[order(respondent_171$row_num, respondent_171$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_172 <- respondent_data_list[[6]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_172 <-  respondent_172[order(respondent_172$row_num, respondent_172$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+
+respondent_180 <- respondent_data_list[[7]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_180 <-  respondent_180[order(respondent_180$row_num, respondent_180$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
+
+respondent_182 <- respondent_data_list[[8]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_182 <-  respondent_182[order(respondent_182$row_num, respondent_182$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_194 <- respondent_data_list[[9]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_194 <-  respondent_194[order(respondent_194$row_num, respondent_194$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_197 <- respondent_data_list[[10]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_197 <-  respondent_197[order(respondent_197$row_num, respondent_197$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_210 <- respondent_data_list[[11]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_210 <-  respondent_210[order(respondent_210$row_num, respondent_210$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_211 <- respondent_data_list[[12]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_211 <-  respondent_211[order(respondent_211$row_num, respondent_211$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_232 <- respondent_data_list[[13]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_232 <-  respondent_232[order(respondent_232$row_num, respondent_232$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_233 <- respondent_data_list[[14]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_233 <-  respondent_233[order(respondent_233$row_num, respondent_233$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_234 <- respondent_data_list[[15]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_234 <-  respondent_234[order(respondent_234$row_num, respondent_234$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+respondent_235 <- respondent_data_list[[16]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_235 <-  respondent_235[order(respondent_235$row_num, respondent_235$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
+
+respondent_236 <- respondent_data_list[[17]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_236 <-  respondent_236[order(respondent_236$row_num, respondent_236$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
+
+respondent_240 <- respondent_data_list[[18]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_240 <-  respondent_240[order(respondent_240$row_num, respondent_240$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_243 <- respondent_data_list[[19]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_243 <-  respondent_243[order(respondent_243$row_num, respondent_243$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_251 <- respondent_data_list[[20]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_251 <-  respondent_251[order(respondent_251$row_num, respondent_251$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
+
+#respondent_253 <- respondent_data_list[[21]] %>% 
+  #select(everything()) %>% 
+  #gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+#respondent_253 <-  respondent_253[order(respondent_253$row_num, respondent_253$report_yr),] %>% 
+  #mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+
+respondent_263 <- respondent_data_list[[22]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_263 <-  respondent_263[order(respondent_263$row_num, respondent_263$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+
+respondent_267 <- respondent_data_list[[23]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_267 <-  respondent_267[order(respondent_267$row_num, respondent_267$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
+
+respondent_275 <- respondent_data_list[[24]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_275 <-  respondent_275[order(respondent_275$row_num, respondent_275$report_yr),] %>% 
+  mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+```
+
+```{r}
+attributes(respondent_101$time)$tzone <- "America/New_York"
+attributes(respondent_118$time)$tzone <- "America/New_York"
+attributes(respondent_157$time)$tzone <- "America/New_York"
+attributes(respondent_160$time)$tzone <- "America/New_York"
+attributes(respondent_171$time)$tzone <- "America/New_York"
+attributes(respondent_172$time)$tzone <- "America/New_York"
+attributes(respondent_180$time)$tzone <- "America/New_York"
+attributes(respondent_182$time)$tzone <- "America/New_York"
+attributes(respondent_194$time)$tzone <- "America/New_York"
+attributes(respondent_197$time)$tzone <- "America/New_York"
+attributes(respondent_210$time)$tzone <- "America/New_York"
+attributes(respondent_211$time)$tzone <- "America/New_York"
+attributes(respondent_232$time)$tzone <- "America/New_York"
+attributes(respondent_233$time)$tzone <- "America/New_York"
+attributes(respondent_234$time)$tzone <- "America/New_York"
+#attributes(respondent_235$time)$tzone <- "America/New_York"
+attributes(respondent_236$time)$tzone <- "America/New_York"
+attributes(respondent_240$time)$tzone <- "America/New_York"
+attributes(respondent_243$time)$tzone <- "America/New_York"
+attributes(respondent_251$time)$tzone <- "America/New_York"
+attributes(respondent_253$time)$tzone <- "America/New_York"
+attributes(respondent_263$time)$tzone <- "America/New_York"
+attributes(respondent_267$time)$tzone <- "America/New_York"
+attributes(respondent_275$time)$tzone <- "America/New_York"
+
+respondent_101_test <- respondent_101
+
+
+respondent_list <- list(respondent_101,
+                        respondent_118,
+                        respondent_157,
+                        respondent_160,
+                        respondent_171,
+                        respondent_172,
+                        respondent_180,
+                        respondent_182,
+                        respondent_194,
+                        respondent_197,
+                        respondent_210,
+                        respondent_211,
+                        respondent_232,
+                        respondent_233,
+                        respondent_234,
+                        respondent_236,
+                        respondent_240,
+                        respondent_243,
+                        respondent_251,
+                        respondent_253,
+                        respondent_263,
+                        respondent_267,
+                        respondent_275)
+
+respondent_list_edit <- lapply(respondent_list, function(x){mutate(x, time = as.character(time))})
+
+respondent_std<- bind_rows(respondent_list_edit, .id = "column_label")
+respondent_std<- respondent_std %>% mutate(time = as.POSIXct(time,format="%Y-%m-%d %H:%M:%S", tz ="America/New_York"))
+
+respondent_std_aggregate <- respondent_std %>% select(time,value)
+respondent_std_aggregate <- aggregate(respondent_std_aggregate["value"], by=respondent_std_aggregate["time"], sum)
+
+
+  
+  
+#respondent_std <- rbind(respondent_101,respondent_118,respondent_157,respondent_160,respondent_171,respondent_172,respondent_180,respondent_182,respondent_194,respondent_197,respondent_210,respondent_211,respondent_232,respondent_233,respondent_234,respondent_236,respondent_240,respondent_243,respondent_251,respondent_253,respondent_263,respondent_267,respondent_275)
 ```
 
