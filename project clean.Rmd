@@ -14,6 +14,7 @@ library(tsibble)
 library(keras)
 library(tensorflow)
 library(purrr)
+library(tfruns)
 
 ```
 
@@ -561,5 +562,94 @@ report(r.model)
 r.model.forecast <- r.model %>% forecast(h = 8810)
 
 r.model.forecast %>% autoplot(r.aggregate.nogap)
+```
+
+```{r}
+respondent_std_aggregate_edit <- respondent_std_aggregate[-c(1:48),]
+respondent_std_aggregate_edit <- respondent_std_aggregate[-c(105087:105135),]
+respondent_std_aggregate_edit$value <- respondent_std_aggregate_edit$value %>% scale()
+respondent_std_aggregate_edit_train <- respondent_std_aggregate_edit[c(1:(0.8*length(respondent_std_aggregate_edit$value))),]
+respondent_std_aggregate_edit_test <- respondent_std_aggregate_edit[c((0.8*length(respondent_std_aggregate_edit$value)):105134),]
+
+
+r.aggregate.mat <- as.matrix(respondent_std_aggregate_edit_train$value)
+
+
+r.aggregate.mat.test <- as.matrix(respondent_std_aggregate_edit_test$value)
+
+
+generator <- timeseries_generator(r.aggregate.mat, targets=r.aggregate.mat, length = 672, batch_size = 10)
+generator_test <- timeseries_generator(r.aggregate.mat.test, targets=r.aggregate.mat.test, length = 672, batch_size = 10)
+
+for(i in 1:length(generator)){
+  print(generator[i])
+}
+
+gg <- generator[[1]]
+train_data <- gg[[1]]%>% drop()
+
+train_label <- gg[[2]]
+
+gg_test <- generator_test[[1]]
+test_data <- gg_test[[1]]%>% drop()
+
+test_label <- gg_test[[2]]
+
+
+FLAGS <- flags(
+  flag_numeric("nodes3", 16),
+  flag_numeric("nodes4", 16),
+  flag_numeric("nodes1", 16),
+  flag_numeric("nodes2", 16),
+  flag_numeric("nodes5", 16),
+  flag_numeric("epochs", 20)
+  
+)
+
+runs <- tuning_run("keras.R", echo = FALSE, sample = 5/2048, flags = list(
+  nodes1 = c(16,32,64,128),
+  nodes2 = c(16,32,64,128),
+  nodes3 = c(16,32,64,128),
+  nodes4 = c(16,32,64,128),
+  nodes5 = c(16,32,64,128),
+  epochs = c(20, 30)
+))
+
+runs[order(runs$metric_val_loss, decreasing = TRUE), ]
+view_run("runs/2019-10-23T05-27-35Z")
+```
+
+```{r}
+winSize = 24 * 7 * 4
+
+model = keras_model_sequential() 
+model %>%
+  layer_dense(units = 16, activation = "relu",
+              input_shape = winSize) %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 1)
+
+model %>% compile(
+  loss = "mse",
+  optimizer = optimizer_rmsprop(),
+  metrics = list("mean_absolute_error")
+)
+
+# Train neural network
+history = model %>% fit(
+  train_data, train_label,
+  epochs = 20, 
+  validation_split = 0.2,
+  verbose = 0
+)
+
+test_preds = model %>% predict(test_data)
+
+error <- (test_label - test_preds)^2
+
+model %>% evaluate(test_data, test_label)
 ```
 
