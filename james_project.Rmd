@@ -1,201 +1,459 @@
 ---
-title: "Project"
+title: "project clean"
+author: "James Louis Nguyen 27839397"
+date: "10 October 2019"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(caret)
 library(lubridate)
 library(fable)
 library(tsibble)
 library(keras)
 library(tensorflow)
 library(purrr)
-library(xts)
-library(forecast)
-library(tfruns)
+
 ```
 
-# Project
+```{r}
+P3S2_hourly_clean <- read.csv("data/P3S2_hourly_clean.csv")
+data <- P3S2_hourly_clean
+respondents = unique(data$respondent_id)
+```
 
 ```{r}
+test <- test %>% filter(respondent_id == 101) %>% select(everything(), -hour25)
+test <- test %>% gather(key, load, -c(respondent_id:timezone), -c(eia_code:dow))
+```
 
-# Read in data. Data sourced from https://www.ferc.gov/docs-filing/forms/form-714/data.asp?fbclid=IwAR3edmimq4-j8_wzt51Sj-uaSkt8__BZE36opiitB3AlN_f5TahcYfeSPJs
-data = read.csv("data/P3S2_hourly_clean.csv")
-respondents = unique(data$respondent_id)
-timezones = unique(data$timezone)
 
+```{r}
+test_101 <- test %>% filter(key == "hour01")
+
+test_101 %>% ggplot(aes(x=plan_date, y=load, colour=as.factor(report_yr))) + geom_line(group=1) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+test_101[1,]
+```
+
+
+```{r}
+test %>% ggplot(aes(x=plan_date, y=load, colour=as.factor(report_yr))) + geom_line(group=1) + facet_wrap(~respondent_id)
+```
+
+
+```{r}
+#cheers will
 # Remove hour25
 data = data[-32] # remove hour25
 
-# Create a list of respondent time series
+# Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
+unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
+m = 1
+n = 1
+for (r in respondents)
+{
+  current_data = filter(data, respondent_id == r)
+  
+  for(j in 1:nrow(current_data))
+  {
+    for(i in 8:31)
+    {
+      unpacked_data[n,m] = current_data[j,i] 
+      n = n + 1
+    }
+  }
+  n = 1
+  m  = m + 1
+}
+
+unpacked_data = as.data.frame(unpacked_data)
+
+colnames(unpacked_data) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R211", "R232", "R233", "R234", "R235", "R236", "R240", "R243", "R251", "R253", "R263", "R267", "R275")
+time_span =  seq(from = as.POSIXct("2006-1-1 0:00", tz="UTC"), to = as.POSIXct("2017-12-31 23:00", tz="UTC"), by="hour")  
+rownames(unpacked_data) = time_span
+
+# Respondent 253 does not have complete data, so remove
+unpacked_data = select(unpacked_data, -R253)
+
+aggregate_data = rowSums(unpacked_data/1e3) # data in Gigawatts
+
+```
+
+```{r}
+aggregate_data <- data.frame(aggregate_data)
+aggregate_data <- rownames_to_column(aggregate_data, "Time")
+aggregate_data <- aggregate_data %>% mutate(Time = as.Date(Time))
+
+aggregate_data_h1 <- aggregate_data[seq(1,nrow(aggregate_data),24),] %>% as_tsibble()
+autoplot(aggregate_data_h1)
+
+arima_h1 <- aggregate_data_h1 %>% model(ARIMA(aggregate_data, stepwise=FALSE, approximation=FALSE))
+report(arima_h1)
+
+arima_h1_fc <- arima_h1 %>% forecast(h=365)
+
+arima_h1_fc %>% autoplot(aggregate_data_h1)
+
+```
+
+```{r}
+aggregate_data_og <- aggregate_data
+
+
+aggregate_data <- data.frame(load=aggregate_data_og)
+aggregate_data <- rownames_to_column(aggregate_data, "Time")
+aggregate_data <- aggregate_data %>% mutate(Time = as.POSIXct(Time,format="%Y-%m-%d %H:%M:%S",tz="Etc/GMT+8"))
+
+#aggregate_data %>% filter(is.na(Time))
+
+
+aggregate_data <- aggregate_data %>% as_tsibble()
+
+#autoplot(aggregate_data)
+
+#model <- aggregate_data %>% model(ARIMA(load))
+#report(model)
+
+#model_fc <- model %>% forecast(h=8760)
+
+#model_fc %>% autoplot(aggregate_data)
+```
+
+```{r}
+generator <- function(data, lookback, delay, min_index, max_index,
+                      shuffle = FALSE, batch_size = 128, step = 6) {
+  if (is.null(max_index))
+    max_index <- nrow(data) - delay - 1
+  i <- min_index + lookback
+  function() {
+    if (shuffle) {
+      rows <- sample(c((min_index+lookback):max_index), size = batch_size)
+    } else {
+      if (i + batch_size >= max_index)
+        i <<- min_index + lookback
+      rows <- c(i:min(i+batch_size-1, max_index))
+      i <<- i + length(rows)
+    }
+
+    samples <- array(0, dim = c(length(rows),
+                                lookback / step,
+                                dim(data)[[-1]]))
+    targets <- array(0, dim = c(length(rows)))
+                      
+    for (j in 1:length(rows)) {
+      indices <- seq(rows[[j]] - lookback, rows[[j]]-1,
+                     length.out = dim(samples)[[2]])
+      samples[j,,] <- data[indices,]
+      targets[[j]] <- data[rows[[j]] + delay,2]
+    }           
+    list(samples, targets)
+  }
+}
+```
+
+```{r}
+loadvalue <- aggregate_data$load %>% as.matrix()
+
+lookback <- 8760
+step <- 24
+delay <- 8760
+batch_size <- 256
+
+train_gen <- generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 1,
+  max_index = 100000,
+  shuffle = TRUE,
+  step = step, 
+  batch_size = batch_size
+)
+
+val_gen = generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 100001,
+  max_index = 150000,
+  step = step,
+  batch_size = batch_size
+)
+
+test_gen <- generator(
+  loadvalue,
+  lookback = lookback,
+  delay = delay,
+  min_index = 150001,
+  max_index = NULL,
+  step = step,
+  batch_size = batch_size
+)
+```
+
+```{r}
+train <- loadvalue[1:70128,] %>% as.matrix()
+val <- loadvalue[70129:87661,] %>% as.matrix()
+test <- loadvalue[87662:105192,] %>% as.matrix()
+
+val_steps <- 8760
+test_steps <- (nrow(data) - 150001 - lookback) / batch_size
+```
+
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 32, input_shape = NULL) %>% 
+  layer_dense(units = 32, activation = "relu") %>% 
+  layer_dense(units = 1)
+
+
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "mae"
+)
+
+
+history <- model %>% fit(
+  train,
+  steps_per_epoch = 500,
+  epochs = 20,
+  validation_data = val,
+  batch_size = 32
+)
+```
+
+
+```{r}
+aggregate_data_mat <- as.matrix(aggregate_data)
+generator <- timeseries_generator(loadvalue, targets = loadvalue, length=24, batch_size=8)
+for (i in 1:length(generator)) {
+  print(generator[i])
+}
+
+
+smp_size <- (2/3) * nrow(aggregate_data)
+
+
+aggregate_data_mat <- aggregate_data_og[1:smp_size]#as.matrix(aggregate_data)
+aggregate_data_mat_test <- aggregate_data_og[((smp_size+1):105192)]
+
+generator <- timeseries_generator(aggregate_data_mat, targets = aggregate_data_mat, length=24, batch_size=100)
+for (i in 1:length(generator)) {
+  print(generator[i])
+}
+
+test_generator <- timeseries_generator(aggregate_data_mat_test, targets = aggregate_data_mat_test, length=24, batch_size=8)
+```
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 32, activation= "relu") %>% 
+  layer_dense(units = 1)
+
+
+model %>% compile(
+  optimizer = optimizer_rmsprop(),
+  loss = "mae"
+)
+
+model %>% fit_generator(generator, 
+                        steps_per_epoch = 8, 
+                        epochs=30,
+                        verbose=1)
+
+predict_generator(model, test_generator, steps=8)
+
+```
+
+#dealing with tzs
+
+```{r}
+#filtering for each of the respondents.
+
 respondent_data_list <- vector("list", 24)
+
 for(i in 1:24){
   respondent_data_list[[i]] = data %>% filter(respondent_id == respondents[i])
 }
 
-# For respondent 101 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
-respondent_101 <- respondent_data_list[[1]] %>% gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
-respondent_101 <- respondent_101[order(respondent_101$row_num, respondent_101$report_yr),] %>% 
+respondent_101 <- respondent_data_list[[1]] %>% 
+  select(everything()) %>% 
+  gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+respondent_101 <-  respondent_101[order(respondent_101$row_num, respondent_101$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
-# For respondent 118 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
+```
+
+```{r}
 respondent_118 <- respondent_data_list[[2]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_118 <-  respondent_118[order(respondent_118$row_num, respondent_118$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
-# For respondent 157 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_157 <- respondent_data_list[[3]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_157 <-  respondent_157[order(respondent_157$row_num, respondent_157$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 160 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_160 <- respondent_data_list[[4]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_160 <-  respondent_160[order(respondent_160$row_num, respondent_160$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
 
-# For respondent 171 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_171 <- respondent_data_list[[5]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_171 <-  respondent_171[order(respondent_171$row_num, respondent_171$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 172 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_172 <- respondent_data_list[[6]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_172 <-  respondent_172[order(respondent_172$row_num, respondent_172$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
-# For respondent 180 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_180 <- respondent_data_list[[7]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_180 <-  respondent_180[order(respondent_180$row_num, respondent_180$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
 
-# For respondent 182 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_182 <- respondent_data_list[[8]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_182 <-  respondent_182[order(respondent_182$row_num, respondent_182$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 194 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_194 <- respondent_data_list[[9]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_194 <-  respondent_194[order(respondent_194$row_num, respondent_194$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 197 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_197 <- respondent_data_list[[10]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_197 <-  respondent_197[order(respondent_197$row_num, respondent_197$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 210 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_210 <- respondent_data_list[[11]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_210 <-  respondent_210[order(respondent_210$row_num, respondent_210$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 211 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_211 <- respondent_data_list[[12]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_211 <-  respondent_211[order(respondent_211$row_num, respondent_211$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 232 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_232 <- respondent_data_list[[13]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_232 <-  respondent_232[order(respondent_232$row_num, respondent_232$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 233 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_233 <- respondent_data_list[[14]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_233 <-  respondent_233[order(respondent_233$row_num, respondent_233$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 234 emove unneeded columns, converter to american/chicago time
 respondent_234 <- respondent_data_list[[15]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_234 <-  respondent_234[order(respondent_234$row_num, respondent_234$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 235 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_235 <- respondent_data_list[[16]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_235 <-  respondent_235[order(respondent_235$row_num, respondent_235$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
 
-# For respondent 236 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_236 <- respondent_data_list[[17]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_236 <-  respondent_236[order(respondent_236$row_num, respondent_236$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Denver"), to = as.POSIXct("2017-12-31 23:00", tz="America/Denver"), by="hour")  )
 
-# For respondent 240 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_240 <- respondent_data_list[[18]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_240 <-  respondent_240[order(respondent_240$row_num, respondent_240$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 243 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_243 <- respondent_data_list[[19]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_243 <-  respondent_243[order(respondent_243$row_num, respondent_243$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 251 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_251 <- respondent_data_list[[20]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_251 <-  respondent_251[order(respondent_251$row_num, respondent_251$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/New_York"), to = as.POSIXct("2017-12-31 23:00", tz="America/New_York"), by="hour")  )
 
-# For respondent 263 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
+#respondent_253 <- respondent_data_list[[21]] %>% 
+  #select(everything()) %>% 
+  #gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
+#respondent_253 <-  respondent_253[order(respondent_253$row_num, respondent_253$report_yr),] %>% 
+  #mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+
 respondent_263 <- respondent_data_list[[22]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_263 <-  respondent_263[order(respondent_263$row_num, respondent_263$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
 
-# For respondent 267 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_267 <- respondent_data_list[[23]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_267 <-  respondent_267[order(respondent_267$row_num, respondent_267$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Los_Angeles"), to = as.POSIXct("2017-12-31 23:00", tz="America/Los_Angeles"), by="hour")  )
 
-# For respondent 275 remove unneeded columns, arrange as a long time series (ordered by hour), time stamp with local time
 respondent_275 <- respondent_data_list[[24]] %>% 
   select(everything()) %>% 
   gather(key, value, -c(respondent_id:timezone), -c(eia_code:dow))
+
 respondent_275 <-  respondent_275[order(respondent_275$row_num, respondent_275$report_yr),] %>% 
   mutate(time = seq(from = as.POSIXct("2006-1-1 0:00", tz="America/Chicago"), to = as.POSIXct("2017-12-31 23:00", tz="America/Chicago"), by="hour")  )
+```
 
-# Change to same timezone
+```{r}
 attributes(respondent_101$time)$tzone <- "America/New_York"
 attributes(respondent_118$time)$tzone <- "America/New_York"
 attributes(respondent_157$time)$tzone <- "America/New_York"
@@ -216,11 +474,14 @@ attributes(respondent_236$time)$tzone <- "America/New_York"
 attributes(respondent_240$time)$tzone <- "America/New_York"
 attributes(respondent_243$time)$tzone <- "America/New_York"
 attributes(respondent_251$time)$tzone <- "America/New_York"
+#attributes(respondent_253$time)$tzone <- "America/New_York"
 attributes(respondent_263$time)$tzone <- "America/New_York"
 attributes(respondent_267$time)$tzone <- "America/New_York"
 attributes(respondent_275$time)$tzone <- "America/New_York"
 
-# Create a list of the transformed data series.
+respondent_101_test <- respondent_101
+
+
 respondent_list <- list(respondent_101,
                         respondent_118,
                         respondent_157,
@@ -245,136 +506,55 @@ respondent_list <- list(respondent_101,
                         respondent_267,
                         respondent_275)
 
-# Convert time to a character series, to enable all respondents to be merged
 respondent_list_edit <- lapply(respondent_list, function(x){mutate(x, time = as.character(time))})
 
-# Combine back into a list, convert time back into a time series object with standard time
 respondent_std<- bind_rows(respondent_list_edit, .id = "column_label")
 respondent_std<- respondent_std %>% mutate(time = as.POSIXct(time,format="%Y-%m-%d %H:%M:%S", tz ="America/New_York"))
 
+respondent_std_aggregate <- respondent_std %>% select(time,value)
+respondent_std_aggregate <- aggregate(respondent_std_aggregate["value"], by=respondent_std_aggregate["time"], sum)
 
 
+  
+  
+#respondent_std <- rbind(respondent_101,respondent_118,respondent_157,respondent_160,respondent_171,respondent_172,respondent_180,respondent_182,respondent_194,respondent_197,respondent_210,respondent_211,respondent_232,respondent_233,respondent_234,respondent_236,respondent_240,respondent_243,respondent_251,respondent_253,respondent_263,respondent_267,respondent_275)
+```
+
+
+```{r}
+r.aggregate <- as.tsibble(respondent_std_aggregate)
+autoplot(r.aggregate)
+r.aggregate.nogap <- fill_gaps(r.aggregate)
+
+#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
+
+r.model <- r.aggregate.nogap %>% model(ARIMA(value))
+report(r.model)
+
+r.model.forecast <- r.model %>% forecast(h = 8760)
+
+r.model.forecast %>% autoplot(r.aggregate.nogap)
+
+autoplot(r.aggregate.nogap)
 ```
 
 ```{r}
-# ============================================== TIME SERIES MODEL ============================================== 
+r.aggregate <- as.tsibble(respondent_std_aggregate)
+r.aggregate <- r.aggregate[-c(1:50),]
+r.aggregate <- r.aggregate[-c(105073:105133),]
+#removing first and last 50 observations to account for difference in tz.
 
-# Split into training and test
-offset = 24*31
-train = seq(1/3*length(aggregate_demand) - offset, 1/3*length(aggregate_demand), by = 1)
-test = seq(1/3*length(aggregate_demand), 1/3*length(aggregate_demand) + offset, by = 1)
+autoplot(r.aggregate)
 
-# fit1 time series benchmark model
-fit1 = auto.arima(aggregate_demand[train], d = 1)
-fit2 = ets(aggregate_demand[train], model = "ANN")
+r.aggregate.nogap <- fill_gaps(r.aggregate)
 
-# Forecast on test set
-demand_forecast1 = forecast(fit1, h = length(test))
-demand_forecast2 = forecast(fit2, h = length(test))
+#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
 
-ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast1$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast1$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast1$lower[,2], color = "lower")) 
+r.model <- r.aggregate.nogap %>% model(ARIMA(value))
+report(r.model)
 
-ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast2$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast2$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast2$lower[,2], color = "lower")) 
+r.model.forecast <- r.model %>% forecast(h = 8810)
 
-ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual")) 
-
-# Need to figure out why this is trash ^
-
-# ============================================== SEQUENTIAL NEURAL NETWORK ============================================== 
-
-# Code here takes inpsiration from https://keras.rstudio.com/articles/tutorial_basic_regression.html
-
-# Training/test split + network memory
-split = 2/3
-winSize = 24 # 1 days memory
-split_point = length(aggregate_demand)*split # last point where training data has a labelled prediction
-
-# Manually Generate Training Data indexes
-train_size = length(aggregate_demand)*split - winSize
-train_data_index = matrix(ncol = winSize, nrow = train_size)
-train_label_index = vector(mode = "numeric", length = train_size)
-for (i in seq(from = 1, to = train_size, by = 1))
-{
-  train_data_index[i,] = seq(from = i, to = i + winSize-1, by = 1)
-  train_label_index[i] = i + winSize
-}
-
-# Manual Generate test data indexes
-offset = length(aggregate_demand)*split - winSize
-test_size = length(aggregate_demand)*(1 - split) - 1
-test_data_index = matrix(ncol = winSize, nrow = test_size)
-test_label_index = vector(mode = "numeric", length = test_size)
-for (i in seq(from = 1, to = test_size, by = 1))
-{
-  test_data_index[i,] = seq(from = offset + i, to = offset + i + winSize-1, by = 1)
-  test_label_index[i] = offset + i + winSize
-}
-
-# Apply to create train part of split
-iter = length(train_label_index)
-train_data = matrix(ncol = winSize, nrow = iter)
-train_label = vector(mode = "numeric", length = iter)
-for (i in seq(from = 1, to = iter, by = 1))
-{
-  train_data[i,] = aggregate_demand[train_data_index[i,]]
-  train_label[i] = aggregate_demand[train_label_index[i]]
-}
-
-# Apply to create test part of split
-iter = length(test_label_index)
-test_data = matrix(ncol = winSize, nrow = iter)
-test_label = vector(mode = "numeric", length = iter)
-for (i in seq(from = 1, to = iter, by = 1))
-{
-  test_data[i,] = aggregate_demand[test_data_index[i,]]
-  test_label[i] = aggregate_demand[test_label_index[i]]
-}
-
-# Standardise input data for neural network
-train_data <- scale(train_data) 
-col_means_train <- attr(train_data, "scaled:center") 
-col_stddevs_train <- attr(train_data, "scaled:scale")
-test_data <- scale(test_data, center = col_means_train, scale = col_stddevs_train)
-
-# Create neural network
-model = keras_model_sequential() 
-model %>%
-    layer_dense(units = 64, activation = "relu",
-                input_shape = winSize) %>%
-    layer_dense(units = 64, activation = "relu") %>%
-    layer_dense(units = 1)
-  
-model %>% compile(
-    loss = "mse",
-    optimizer = optimizer_rmsprop(),
-    metrics = list("mean_absolute_error")
-  )
-
-# Train neural network
-history = model %>% fit(
-  train_data, train_label,
-  epochs = 20, 
-  validation_split = 0.2,
-  verbose = 0
-)
-
-# Plot the model fitting performance
-plot(history, metrics = "mean_absolute_error", smooth = FALSE)
-  
-# predict model on test set
-test_preds = model %>% predict(test_data)
-
-# Plot results on large scale
-ggplot() + geom_line(aes(x = time_span[test_label_index], y = test_preds, color = "forecast")) + geom_line(aes(x = time_span[train_label_index], y = aggregate_demand[train_label_index], color = "train"))  + geom_line(aes(x = time_span[test_label_index], y = test_label, color = "actual")) + xlab("Year") + ylab("Electricity Demand (GW)") + ggtitle("Results of Neural Network Forecast")
-
-# Define an inspection interval for graph close to split point
-look_back = 24*7
-look_forward = 24*16 #24 hours * number of days
-ggplot() + 
-  geom_line(aes(x = time_span[tail(train_label_index,look_back)], y = tail(train_label,look_back),  colour = "train")) +
-  geom_line(aes(x = time_span[head(test_label_index,look_forward)], y =  head(test_label, look_forward), colour = "actual")) +
-  geom_line(aes(x = time_span[head(test_label_index,look_forward)], y = head(test_preds, look_forward), colour = "predictions" )) + 
-  xlab("Month") + ylab("Electricity Demand (GW)") + ggtitle("Results of Neural Network Forecast - Close Up")
-
-
+r.model.forecast %>% autoplot(r.aggregate.nogap)
 ```
+
