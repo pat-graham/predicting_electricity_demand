@@ -227,7 +227,7 @@ aggregate_demand <- aggregate(aggregate_demand["value"], by=aggregate_demand["ti
 
 # The alignment to one time zone creates zeros at start and end of data, need to remove a buffer at either end
 end = nrow(aggregate_demand)
-buffer = 24*3 # 3 days
+buffer = 24*4 # 3 days
 aggregate_demand <- aggregate_demand[-c(1:buffer),]
 aggregate_demand <- aggregate_demand[-c((end-buffer):end),]
 
@@ -238,45 +238,40 @@ aggregate_demand <- aggregate_demand[-c((end-buffer):end),]
 ```{r Fitting an ARIMA Benchmark Model}
 
 # Convert data into required format
-aggregate_demand_ts <- ts(aggregate_demand, frequency = 24) #turn into timeseries object
+aggregate_demand_ts <- ts(aggregate_demand[,2], frequency =  24) #turn into timeseries object
 aggregate_demand_tsb <- as.tsibble(aggregate_demand) # turn into a tsibble object for use with Fable
 
 # Plot time series
 autoplot(aggregate_demand_tsb)
 
 # Check for autocorrelation in aggregate demand
-plot(acf(aggregate_demand_ts, lag.max = 24)) #ACF for one day
-plot(acf(aggregate_demand_ts, lag.max = 7 * 24)) # ACF for one week 
-plot(acf(aggregate_demand_ts, lag.max = 7 * 24 * 31)) # ACF for one month
+acf(aggregate_demand_ts, lag.max = 24) #ACF for one day
+acf(aggregate_demand_ts, lag.max = 7 * 24) # ACF for one week 
+acf(aggregate_demand_ts, lag.max = 7 * 24 * 31) # ACF for one month
 
 # Decompose into seasonality and trend, plot the results
-aggregate_components <- decompose(aggregate_demand) 
+aggregate_components <- decompose(aggregate_demand_ts) 
 plot(aggregate_components) 
 
-# Define training, validation and test
-train_index = seq(from = 1, to = round(0.6*nrow(aggregate_demand)), by = 1)
-validation_index = seq(from = round(0.6*nrow(aggregate_demand)) + 1, to = round(0.8*nrow(aggregate_demand)), by = 1)
+# Define training, Test and test
+train_index = seq(from = 1, to = round(0.8*nrow(aggregate_demand)), by = 1)
 test_index = seq(from = round(0.8*nrow(aggregate_demand)) + 1, to = nrow(aggregate_demand), by = 1)
 
 # Fit ARIMA model and forecast
-benchmark_model = auto.arima(aggregate_demand_ts[train_index,2], D = 1)
-benchmark_forecast = forecast(benchmark_model, h = length(validation_index))
+benchmark_model = auto.arima(aggregate_demand_ts[train_index], D=1)
+benchmark_forecast = forecast(benchmark_model, h = length(test_index))
 
 # Plot ARIMA forecast
 ggplot() + 
+  geom_line(aes(x = aggregate_demand[test_index,1], y = benchmark_forecast$mean, color = "forecast")) +
   geom_line(aes(x = aggregate_demand[train_index,1], y = aggregate_demand[train_index,2], color = "train")) +
-  geom_line(aes(x = aggregate_demand[validation_index,1], y = benchmark_forecast$mean, color = "forecast")) +
-  geom_line(aes(x = aggregate_demand[validation_index,1], y = benchmark_forecast$upper[,2], color = "upper")) +
-  geom_line(aes(x = aggregate_demand[validation_index,1], y = benchmark_forecast$lower[,2], color = "lower"))
-
-ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train_index], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual")) 
+  geom_line(aes(x = aggregate_demand[test_index,1], y = aggregate_demand[test_index,2], color = "test"), alpha = 1/2) +
+  xlab("Year") + ylab("Aggregate Demand") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
 ```{r Fitting a Neural Network Model}
-
-# Redefine training, no need for validation as keras has this function in built
-train_index = seq(from = 1, to =  round(0.8*nrow(aggregate_demand)), by = 1)
 
 # Scale input data to be standardized
 aggregate_data_nn = aggregate_data
