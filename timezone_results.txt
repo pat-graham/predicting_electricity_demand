@@ -1,0 +1,40 @@
+> unique(timezones[,1])
+[1] "CST" "CDT"
+> unique(timezones[,2])
+[1] "CST" "CS " "CD " "CDT"
+> unique(timezones[,3])
+[1] "EST" "EDT" "DST"
+> unique(timezones[,4])
+[1] "MST"
+> unique(timezones[,5])
+[1] "EST"
+> unique(timezones[,6])
+[1] "EST" "EDT"
+> unique(timezones[,7])
+[1] "MST" "MDT" "PST"
+> unique(timezones[,8])
+[1] "PST" "PDT"
+> unique(timezones[,9])
+[1] "PPT"
+> unique(timezones[,10])
+[1] "EST"
+> unique(timezones[,11])
+[1] "PST" "PDT"
+> unique(timezones[,12])
+[1] "PST" "PDT"
+> unique(timezones[,13])
+[1] "EST" "DST" "EDT"
+> unique(timezones[,14])
+[1] "MST"
+> unique(timezones[,15])
+[1] "PST" "PDT"
+> unique(timezones[,16])
+[1] "PST" "PDT" "DST"
+> unique(timezones[,17])
+[1] "EST" "EDT"
+> unique(timezones[,18])
+[1] "CST" "CDT"
+> unique(timezones[,19])
+[1] "PST" "PDT"
+> unique(timezones[,20])
+[1] "CST" "CDT" "CPT"
