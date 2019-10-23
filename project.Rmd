@@ -259,6 +259,7 @@ test_index = seq(from = round(0.8*nrow(aggregate_demand)) + 1, to = nrow(aggrega
 
 # Fit ARIMA model and forecast
 benchmark_model = auto.arima(aggregate_demand_ts[train_index], D=1)
+acf(benchmark_model$residuals, main = "Benchmark Model Residuals Plot")
 benchmark_forecast = forecast(benchmark_model, h = length(test_index))
 
 # Plot ARIMA forecast
@@ -268,6 +269,11 @@ ggplot() +
   geom_line(aes(x = aggregate_demand[test_index,1], y = aggregate_demand[test_index,2], color = "test"), alpha = 1/2) +
   xlab("Year") + ylab("Aggregate Demand") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
   theme(plot.title = element_text(hjust = 0.5))
+
+# Mean squared error calculation
+actual = as.matrix(aggregate_demand[test_index,1])
+pred = as.vector(benchmark_forecast$mean)
+MSE_arima = mean((actual - pred)^2)
 
 ```
 
