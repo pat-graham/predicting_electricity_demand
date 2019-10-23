@@ -15,6 +15,7 @@ library(tensorflow)
 library(lmtest)
 library(purrr)
 library(xts)
+library(FinTS)
 library(forecast)
 library(tfruns)
 ```
@@ -276,8 +277,17 @@ actual = as.matrix(aggregate_demand[test_index,1])
 pred = as.vector(benchmark_forecast$mean)
 MSE_arima = mean((actual - pred)^2)
 
-#Test for heteroskedacisity
-bp = lm(residuals(benchmark_model)~1)
+#Testing for heteroskedacisity in ARIMA
+bp = lm(residuals(benchmark_model)~stats::lag(residuals(benchmark_model), k = 24))
+bptest = bptest(bp, data = aggregate_demand_ts[train_index])
+archeffects = ArchTest(benchmark_model$residuals, lags = 12)
+
+
+#Try GARCH
+
+gbench = garch(aggregate_demand_ts, order = c(12, 12))
+garchresids <- na.omit(gbench$residuals)
+acf(garchresids, main = "Benchmark Model Residuals Plot", lag.max = 500)
 
 ```
 
