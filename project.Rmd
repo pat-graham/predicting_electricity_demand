@@ -12,6 +12,7 @@ library(fable)
 library(tsibble)
 library(keras)
 library(tensorflow)
+library(lmtest)
 library(purrr)
 library(xts)
 library(forecast)
@@ -274,6 +275,9 @@ ggplot() +
 actual = as.matrix(aggregate_demand[test_index,1])
 pred = as.vector(benchmark_forecast$mean)
 MSE_arima = mean((actual - pred)^2)
+
+#Test for heteroskedacisity
+bp = lm(residuals(benchmark_model)~1)
 
 ```
 
