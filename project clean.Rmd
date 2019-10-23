@@ -469,12 +469,12 @@ attributes(respondent_211$time)$tzone <- "America/New_York"
 attributes(respondent_232$time)$tzone <- "America/New_York"
 attributes(respondent_233$time)$tzone <- "America/New_York"
 attributes(respondent_234$time)$tzone <- "America/New_York"
-#attributes(respondent_235$time)$tzone <- "America/New_York"
+attributes(respondent_235$time)$tzone <- "America/New_York"
 attributes(respondent_236$time)$tzone <- "America/New_York"
 attributes(respondent_240$time)$tzone <- "America/New_York"
 attributes(respondent_243$time)$tzone <- "America/New_York"
 attributes(respondent_251$time)$tzone <- "America/New_York"
-attributes(respondent_253$time)$tzone <- "America/New_York"
+#attributes(respondent_253$time)$tzone <- "America/New_York"
 attributes(respondent_263$time)$tzone <- "America/New_York"
 attributes(respondent_267$time)$tzone <- "America/New_York"
 attributes(respondent_275$time)$tzone <- "America/New_York"
@@ -497,11 +497,11 @@ respondent_list <- list(respondent_101,
                         respondent_232,
                         respondent_233,
                         respondent_234,
+                        respondent_235,
                         respondent_236,
                         respondent_240,
                         respondent_243,
                         respondent_251,
-                        respondent_253,
                         respondent_263,
                         respondent_267,
                         respondent_275)
@@ -518,5 +518,43 @@ respondent_std_aggregate <- aggregate(respondent_std_aggregate["value"], by=resp
   
   
 #respondent_std <- rbind(respondent_101,respondent_118,respondent_157,respondent_160,respondent_171,respondent_172,respondent_180,respondent_182,respondent_194,respondent_197,respondent_210,respondent_211,respondent_232,respondent_233,respondent_234,respondent_236,respondent_240,respondent_243,respondent_251,respondent_253,respondent_263,respondent_267,respondent_275)
+```
+
+
+```{r}
+r.aggregate <- as.tsibble(respondent_std_aggregate)
+autoplot(r.aggregate)
+r.aggregate.nogap <- fill_gaps(r.aggregate)
+
+#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
+
+r.model <- r.aggregate.nogap %>% model(ARIMA(value))
+report(r.model)
+
+r.model.forecast <- r.model %>% forecast(h = 8760)
+
+r.model.forecast %>% autoplot(r.aggregate.nogap)
+
+autoplot(r.aggregate.nogap)
+```
+
+```{r}
+r.aggregate <- as.tsibble(respondent_std_aggregate)
+r.aggregate <- r.aggregate[-c(1:50),]
+r.aggregate <- r.aggregate[-c(105073:105133),]
+#removing first and last 50 observations to account for difference in tz.
+
+autoplot(r.aggregate)
+
+r.aggregate.nogap <- fill_gaps(r.aggregate)
+
+#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
+
+r.model <- r.aggregate.nogap %>% model(ARIMA(value))
+report(r.model)
+
+r.model.forecast <- r.model %>% forecast(h = 8810)
+
+r.model.forecast %>% autoplot(r.aggregate.nogap)
 ```
 
