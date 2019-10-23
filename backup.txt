@@ -1,0 +1,39 @@
+# Convert hourly data into list form. Note 12 years of data, with 3 gap years in 2008, 2012 and 2016.
+unpacked_data = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
+timezones = matrix(nrow = 12*365*24+3*24, ncol = length(respondents))
+m = 1
+n = 1
+for (r in respondents)
+{
+  current_data = filter(data, respondent_id == r)
+
+  for(j in 1:nrow(current_data))
+  {
+    for(i in 8:31)
+    {
+      unpacked_data[n,m] = current_data[j,i] 
+      timezones[n,m] = as.character(current_data$timezone[j])
+      n = n + 1
+    }
+  }
+  n = 1
+  m  = m + 1
+}
+
+# Convert to data frame
+unpacked_data = unpacked_data[,-21] # Respondent 253 has NAs at end
+timezones = timezones[,-21]
+unpacked_data = unpacked_data[,-16] # Respondent 235 has 0's at start
+timezones = timezones[,-16]
+unpacked_data = unpacked_data[,-15] # Respondent 234 has corrupt timezone data
+timezones = timezones[,-15]
+unpacked_data = timezones[,-12] # Respondent 211 206 timezone? 
+timezones = timezones[,-12]
+
+unpacked_data = as.data.frame(unpacked_data)
+
+# Rename rows and columns
+colnames(unpacked_data) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R232", "R233", "R236", "R240", "R243", "R251", "R263", "R267", "R275")
+colnames(timezones) = c("R101", "R118", "R157", "R160", "R171", "R172", "R180", "R182", "R194", "R197", "R210", "R232", "R233", "R236", "R240", "R243", "R251", "R263", "R267", "R275")
+time_span =  seq(from = as.POSIXct("2006-1-1 0:00", tz="UTC"), to = as.POSIXct("2017-12-31 23:00", tz="UTC"), by="hour")  
+rownames(unpacked_data) = time_span
