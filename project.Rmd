@@ -319,7 +319,7 @@ aggregate_demand <-rowSums(TSData, na.rm = TRUE) #aggregate energy demand by hou
 
 ```{r Investigataion}
 
- plot(acf(aggregate_demand, lag.max = 7 * 24), main = "Aggregate Data ACF (one week)") #show there is autocorrelation
+plot(acf(aggregate_demand, lag.max = 7 * 24), main = "Aggregate Data ACF (one week)") #show there is autocorrelation
 
 
 # more wrangling to break down the data
@@ -343,7 +343,7 @@ fit1 = auto.arima(aggregate_demand[train], D = 1)
 # Forecast on test set
 demand_forecast1 = forecast(fit1, h = length(test))
 
-#plo of the ARIMA
+#plot of the ARIMA
 ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast1$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast1$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast1$lower[,2], color = "lower")) + ylab("Mean Energy Usage") + xlab("Time Span")
 
 ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual")) 
