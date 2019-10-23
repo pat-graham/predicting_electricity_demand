@@ -1,7 +1,7 @@
 model = keras_model_sequential() 
 model %>%
   layer_dense(units = FLAGS$nodes1, activation = "relu",
-              input_shape = winSize) %>%
+              input_shape = 24) %>%
   layer_dropout(rate = FLAGS$dropout1) %>%
   layer_dense(units = FLAGS$nodes2, activation = "relu") %>%
   layer_dropout(rate = FLAGS$dropout2) %>% 

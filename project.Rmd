@@ -10,11 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(keras)
 library(xts)
+library(plyr)
+library(tsibble)
 library(forecast)
 library(tfruns)
 ```
 
-```{r Data Wrangling}
+```{r Data Wrangling NEEDED}
 # Read in data. Data sourced from https://www.ferc.gov/docs-filing/forms/form-714/data.asp?fbclid=IwAR3edmimq4-j8_wzt51Sj-uaSkt8__BZE36opiitB3AlN_f5TahcYfeSPJs
 data = read.csv("data/P3S2_hourly_clean.csv")
 respondents = unique(data$respondent_id)
@@ -30,6 +32,7 @@ respondent_data_list <- vector("list", 24)
 for(i in 1:24){ 
   respondent_data_list[[i]] = data %>% filter(respondent_id == respondents[i]) 
 } 
+
  #101
 respondent_101 <- respondent_data_list[[1]] %>%  
   select(everything()) %>%  
@@ -308,25 +311,25 @@ respondent_275 <- xts(respondent_275, order.by =  respondent_275[,1])
 respondent_275 <- respondent_275[,2]
 
 TSData <- merge(respondent_275, respondent_267, respondent_263, respondent_251, respondent_243, respondent_240, respondent_236, respondent_235, respondent_234, respondent_233, respondent_232, respondent_211, respondent_210, respondent_197, respondent_194, respondent_182, respondent_180, respondent_172, respondent_171, respondent_160, respondent_157, respondent_118, respondent_101, retclass = "data.frame" )
+
+TSData <- mutate_all(TSData, function(x) as.numeric(as.character(x))) 
+aggregate_demand <-rowSums(TSData, na.rm = TRUE) #aggregate energy demand by hour
+
 ```
 
 ```{r Investigataion}
-aggregate_data <- ts(TSData, start = 2006-1-1, frequency = 24) 
-TSData_log <- do.call(cbind, lapply(TSData, function(x) diff(log(as.numeric(as.character(x))))))
-aggregate_data2 <- ts(TSData_log, start = 2006-1-1, frequency = 24) #make data into time series for R 
-aggregate_components <- decompose(aggregate_data) #decompose the data 
-aggregate_components2 <- decompose(aggregate_data2) 
+
+ plot(acf(aggregate_demand, lag.max = 7 * 24), main = "Aggregate Data ACF (one week)") #show there is autocorrelation
+
+
+# more wrangling to break down the data
+aggregate_demand <- na.exclude(aggregate_demand) # get rid of NA's
+aggregate_demand <- ts(aggregate_demand, frequency = 24) #turn into timeseries object
+#decompose into seasonality and trend
+aggregate_components <- decompose(aggregate_demand) #decompose the data 
 plot(aggregate_components) # plot the decomposition 
-plot(aggregate_components2) 
-```
 
-```{r Further Wrangling for Arima and Keras}
-TSData <- do.call(cbind, lapply(TSData, function(x) as.numeric(as.character(x))))
-aggregate_demand <- rowSums(TSData)
-aggregate_demand <- na.exclude(aggregate_demand)
-aggregate_demand <- ts(aggregate_demand, frequency = 24)
 ```
-
 
 ```{r ARIMA}
 # Split into training and test
@@ -336,36 +339,28 @@ test = seq(1/3*length(aggregate_demand), 1/3*length(aggregate_demand) + offset, 
 
 # fit1 time series benchmark model
 fit1 = auto.arima(aggregate_demand[train], D = 1)
-fit2 = ets(aggregate_demand[train], model = "ANN")
 
 # Forecast on test set
 demand_forecast1 = forecast(fit1, h = length(test))
-demand_forecast2 = forecast(fit2, h = length(test))
 
-ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast1$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast1$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast1$lower[,2], color = "lower")) 
-
-ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast2$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast2$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast2$lower[,2], color = "lower")) 
+#plo of the ARIMA
+ggplot() + geom_line(aes(x = time_span[test], y = demand_forecast1$mean, color = "forecast")) + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train")) + geom_line(aes(x = time_span[test], y = demand_forecast1$upper[,2], color = "upper")) + geom_line(aes(x = time_span[test], y = demand_forecast1$lower[,2], color = "lower")) + ylab("Mean Energy Usage") + xlab("Time Span")
 
 ggplot() + geom_line(aes(x = time_span[train], y = aggregate_demand[train], color = "train"))+ geom_line(aes(x = time_span[test], y = aggregate_demand[test], color = "actual")) 
 
 ```
 
-```{r Checking ARIMA residuals}
+```{r Checking ARIMA residuals NEEDED}
 plot(demand_forecast1$residuals)
-acf(demand_forecast1$residuals)
+plot(acf(demand_forecast1$residual, lag.max = 7 * 24), main = "ARIMA Residuals ACF (one week)")
 pacf(demand_forecast1$residuals)
-
-plot(demand_forecast2$residuals)
-acf(demand_forecast2$residuals)
-pacf(demand_forecast2$residuals)
 ```
-
 
 ```{r Neural Networks}
 # Code here takes inpsiration from https://keras.rstudio.com/articles/tutorial_basic_regression.html
 
 # Training/test split + network memory
-split = 2/3
+split = 2/3 
 winSize = 24 # 1 days memory
 split_point = length(aggregate_demand)*split # last point where training data has a labelled prediction
 
@@ -416,28 +411,6 @@ col_means_train <- attr(train_data, "scaled:center")
 col_stddevs_train <- attr(train_data, "scaled:scale")
 test_data <- scale(test_data, center = col_means_train, scale = col_stddevs_train)
 
-# Create neural network
-model = keras_model_sequential() 
-model %>%
-    layer_dense(units = 64, activation = "relu",
-                input_shape = winSize) %>%
-    layer_dense(units = 64, activation = "relu") %>%
-    layer_dense(units = 1)
-  
-model %>% compile(
-    loss = "mse",
-    optimizer = optimizer_rmsprop(),
-    metrics = list("mean_absolute_error")
-  )
-
-# Train neural network
-history = model %>% fit(
-  train_data, train_label,
-  epochs = 20, 
-  validation_split = 0.2,
-  verbose = 1
-)
-
 # Plot the model fitting performance
 plot(history, metrics = "mean_absolute_error", smooth = FALSE)
   
@@ -467,7 +440,7 @@ FLAGS <- flags(
   
 )
 
-runs <- tuning_run("keras.R", echo = FALSE, sample = (1/288), flags = list(
+runs <- tuning_run("keras.R", echo = FALSE, sample = (3/288), flags = list(
   dropout1 = c(0.2, 0.3, 0.4),
   dropout2 = c(0.2, 0.3, 0.4),
   nodes1 = c(32,64,128,256),
@@ -476,3 +449,4 @@ runs <- tuning_run("keras.R", echo = FALSE, sample = (1/288), flags = list(
 ))
 runs[order(runs$metric_val_loss, decreasing = TRUE), ]
 ```
+
