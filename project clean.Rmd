@@ -538,6 +538,8 @@ r.model.forecast %>% autoplot(r.aggregate.nogap)
 autoplot(r.aggregate.nogap)
 ```
 
+
+
 ```{r}
 r.aggregate <- as.tsibble(respondent_std_aggregate)
 r.aggregate <- r.aggregate[-c(1:50),]
@@ -551,6 +553,9 @@ r.aggregate.nogap <- fill_gaps(r.aggregate)
 #good point to mention, maybe remove first few values and last few values to make up for timezone differences.
 
 r.model <- r.aggregate.nogap %>% model(ARIMA(value))
+
+feasts::ACF(r.aggregate.nogap) %>% autoplot()
+
 report(r.model)
 
 r.model.forecast <- r.model %>% forecast(h = 8810)
