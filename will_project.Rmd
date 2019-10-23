@@ -321,7 +321,6 @@ aggregate_demand <-rowSums(TSData, na.rm = TRUE) #aggregate energy demand by hou
 
 plot(acf(aggregate_demand, lag.max = 7 * 24), main = "Aggregate Data ACF (one week)") #show there is autocorrelation
 
-
 # more wrangling to break down the data
 aggregate_demand <- na.exclude(aggregate_demand) # get rid of NA's
 aggregate_demand <- ts(aggregate_demand, frequency = 24) #turn into timeseries object

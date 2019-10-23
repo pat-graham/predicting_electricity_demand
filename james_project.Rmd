@@ -567,6 +567,8 @@ r.model.forecast %>% autoplot(r.aggregate.nogap)
 ```{r}
 respondent_std_aggregate_edit <- respondent_std_aggregate[-c(1:48),]
 respondent_std_aggregate_edit <- respondent_std_aggregate[-c(105087:105135),]
+
+
 respondent_std_aggregate_edit$value <- respondent_std_aggregate_edit$value %>% scale()
 respondent_std_aggregate_edit_train <- respondent_std_aggregate_edit[c(1:(0.8*length(respondent_std_aggregate_edit$value))),]
 respondent_std_aggregate_edit_test <- respondent_std_aggregate_edit[c((0.8*length(respondent_std_aggregate_edit$value)):105134),]
