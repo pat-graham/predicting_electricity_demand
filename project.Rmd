@@ -280,7 +280,7 @@ MSE_arima = mean((actual - pred)^2)
 ```{r Fitting a Neural Network Model}
 
 # Scale input data to be standardized
-aggregate_data_nn = aggregate_data
+aggregate_data_nn = aggregate_demand
 aggregate_data_nn$value <- aggregate_data_nn$value %>% scale()
 col_means <- attr(aggregate_data_nn$value, "scaled:center") # extract scaling mean
 col_stddev <- attr(aggregate_data_nn$value, "scaled:scale") # extract scaling standard deviation
@@ -290,8 +290,8 @@ train_data = aggregate_data_nn[train_index,]
 test_data = aggregate_data_nn[test_index,]
 
 # Convert input data vector to matrix form
-generator_train <- timeseries_generator(data = as.matrix(train_data$value), targets = as.matrix(train_data$value), length = 672, batch_size = 10)
-generator_test <- timeseries_generator(data = as.matrix(test_data$value), targets = as.matrix(test_data$value), length = 672, batch_size = 10)
+generator_train <- timeseries_generator(data = as.matrix(train_data$value), targets = as.matrix(train_data$value), length = 672, batch_size = 10000)
+generator_test <- timeseries_generator(data = as.matrix(test_data$value), targets = as.matrix(test_data$value), length = 672, batch_size = 10000)
 
 # Create training data
 generator_output_tr = generator_train[[1]]
@@ -310,7 +310,7 @@ FLAGS <- flags(
   flag_numeric("nodes3", 16),
   flag_numeric("nodes4", 16),
   flag_numeric("nodes5", 16),
-  flag_numeric("epochs", 20)
+  flag_numeric("epochs", 30)
   
 )
 
@@ -321,7 +321,7 @@ runs <- tuning_run("keras.R", echo = FALSE, sample = 5/2048, flags = list(
   nodes3 = c(16,32,64,128),
   nodes4 = c(16,32,64,128),
   nodes5 = c(16,32,64,128),
-  epochs = c(20, 30)
+  epochs = c(30)
 ))
 
 # Store results
@@ -370,6 +370,30 @@ test_label_unscaled <- test_label * attr(aggregate_data_nn$value, 'scaled:scale'
 # Calculate test set mean squared error
 mse_nn = mean((test_label_unscaled - test_preds)^2)
 
+# Rolling forecast window.
+test_roll <- rbind(test_data[1,])
+test_roll_label <- rbind(test_label[1,])
+
+rolling.fc <- vector("numeric", 672)
+
+for(i in 1:672){
+    predict <- model %>% predict(test_roll)
+  test_roll <- cbind(test_roll,predict)
+  test_roll <- rbind(test_roll[c(2:673)])
+
+  
+  rolling.fc[i] <- predict
+}
+
+rolling.fc <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+
+df <- cbind(rolling.fc, test_label_unscaled[c(1:672)])
+df <- data.frame(df) 
+df <- df %>% mutate(index = rownames(df))
+
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc, group=1, colour="predictions")) + geom_line(aes(y=V2, group=1, colour="test")) + ylab("Aggregate Load") + theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
 # Graphs to come
 
 ```
