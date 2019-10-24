@@ -238,7 +238,7 @@ aggregate_demand <- aggregate_demand[-c((end-buffer):end),]
 ```{r Fitting an ARIMA Benchmark Model}
 
 # Convert data into required format
-aggregate_demand_ts <- ts(aggregate_demand[,2], frequency =  24) #turn into timeseries object
+aggregate_demand_ts <- ts(aggregate_demand[,2], frequency =  24) # freq = 24 to capture daily seasonality
 aggregate_demand_tsb <- as.tsibble(aggregate_demand) # turn into a tsibble object for use with Fable
 
 # Plot time series
@@ -269,6 +269,13 @@ ggplot() +
   geom_line(aes(x = aggregate_demand[test_index,1], y = aggregate_demand[test_index,2], color = "test"), alpha = 1/2) +
   xlab("Year") + ylab("Aggregate Demand") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
   theme(plot.title = element_text(hjust = 0.5))
+
+# Plot residuals
+ggplot() + 
+  geom_line(aes(x = aggregate_demand[train_index,1], y = benchmark_model$residuals, colour = "Residuals")) + 
+  xlab("Time") + ylab("Residual Value") + ggtitle("Residuals Plot - Shows Heteroskedasticity")
+
+# Check for heteroskedasticity by running an ARCH test
 
 # Mean squared error calculation
 actual = as.matrix(aggregate_demand[test_index,1])
@@ -371,8 +378,9 @@ test_label_unscaled <- test_label * attr(aggregate_data_nn$value, 'scaled:scale'
 mse_nn = mean((test_label_unscaled - test_preds)^2)
 
 # Rolling forecast window.
-test_roll <- rbind(test_data[1,])
-test_roll_label <- rbind(test_label[1,])
+
+rolling_actual <- aggregate_demand[test_index,2][c(20346:21017)]
+test_roll <- rbind(aggregate_data_nn[test_index,2][c(19674:20345)])
 
 rolling.fc <- vector("numeric", 672)
 
@@ -385,15 +393,21 @@ for(i in 1:672){
   rolling.fc[i] <- predict
 }
 
-rolling.fc <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+rolling.fc.scaled <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+rolling.fc.scaled <- rbind(rolling.fc.scaled)
 
-df <- cbind(rolling.fc, test_label_unscaled[c(1:672)])
+df <- cbind(rolling.fc.scaled, rolling_actual)
 df <- data.frame(df) 
 df <- df %>% mutate(index = rownames(df))
 
-df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc, group=1, colour="predictions")) + geom_line(aes(y=V2, group=1, colour="test")) + ylab("Aggregate Load") + theme(
+
+
+rolling.mse <- mean((df$rolling_actual - df$rolling.fc.scaled)^2)
+# Graphs to come
+
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc.scaled, group=1, colour="predictions")) + geom_line(aes(y=rolling_actual, group=1, colour="test")) + ylab("Aggregate Load") + theme(
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
-# Graphs to come
+
 
 ```
