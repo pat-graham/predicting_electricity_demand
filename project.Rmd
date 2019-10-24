@@ -274,7 +274,7 @@ ggplot() +
   geom_line(aes(x = aggregate_demand[test_index,1], y = benchmark_forecast$mean, color = "forecast")) +
   geom_line(aes(x = aggregate_demand[train_index,1], y = aggregate_demand[train_index,2], color = "train")) +
   geom_line(aes(x = aggregate_demand[test_index,1], y = aggregate_demand[test_index,2], color = "test"), alpha = 1/2) +
-  xlab("Year") + ylab("Aggregate Demand") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
+  xlab("Year") + ylab("Aggregate Demand MhW") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
   theme(plot.title = element_text(hjust = 0.5))
 
 # Mean squared error calculation
@@ -300,7 +300,7 @@ pacf(garchresids, main = "PACF of GARCH Model Residuals Plot", lag.max = 500)
 ```{r Fitting a Neural Network Model}
 
 # Scale input data to be standardized
-aggregate_data_nn = aggregate_data
+aggregate_data_nn = aggregate_demand
 aggregate_data_nn$value <- aggregate_data_nn$value %>% scale()
 col_means <- attr(aggregate_data_nn$value, "scaled:center") # extract scaling mean
 col_stddev <- attr(aggregate_data_nn$value, "scaled:scale") # extract scaling standard deviation
@@ -384,3 +384,38 @@ test_preds = model %>% predict(test_data)
 model %>% evaluate(test_data, test_label)
 
 ```
+
+```{r Forecasting NN}
+# Rolling forecast window.
+
+rolling_actual <- aggregate_demand[test_index,2][c(20346:21017)]
+test_roll <- rbind(aggregate_data_nn[test_index,2][c(19674:20345)])
+
+rolling.fc <- vector("numeric", 672)
+
+for(i in 1:672){
+    predict <- model %>% predict(test_roll)
+  test_roll <- cbind(test_roll,predict)
+  test_roll <- rbind(test_roll[c(2:673)])
+
+  
+  rolling.fc[i] <- predict
+}
+
+rolling.fc.scaled <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+rolling.fc.scaled <- rbind(rolling.fc.scaled)
+
+df <- cbind(rolling.fc.scaled, rolling_actual)
+df <- data.frame(df) 
+df <- df %>% mutate(index = rownames(df))
+
+
+
+rolling.mse <- mean((df$rolling_actual - df$rolling.fc.scaled)^2)
+# Graphs to come
+
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc.scaled, group=1, colour="predictions")) + geom_line(aes(y=rolling_actual, group=1, colour="test")) + ylab("Aggregate Load") + theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
