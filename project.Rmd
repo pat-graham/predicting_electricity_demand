@@ -260,6 +260,7 @@ test_index = seq(from = round(0.8*nrow(aggregate_demand)) + 1, to = nrow(aggrega
 # Fit ARIMA model and forecast
 benchmark_model = auto.arima(aggregate_demand_ts[train_index], D=1)
 acf(benchmark_model$residuals, main = "Benchmark Model Residuals Plot")
+pacf(benchmark_model$residuals, main = "PACF of ARIMA Model Residuals Plot")
 benchmark_forecast = forecast(benchmark_model, h = length(test_index))
 
 # Plot ARIMA forecast
@@ -275,7 +276,17 @@ ggplot() +
   geom_line(aes(x = aggregate_demand[train_index,1], y = benchmark_model$residuals, colour = "Residuals")) + 
   xlab("Time") + ylab("Residual Value") + ggtitle("Residuals Plot - Shows Heteroskedasticity")
 
-# Check for heteroskedasticity by running an ARCH test
+# Check for heteroskedasticity by running an Breusch Pagan and ARCH test
+bp = lm(residuals(benchmark_model)~stats::lag(residuals(benchmark_model), k = 24))
+bptest = bptest(bp, data = aggregate_demand_ts[train_index])
+archeffects = ArchTest(benchmark_model$residuals, lags = 12)
+
+#Try GARCH
+gbench = garch(aggregate_demand_ts, order = c(12, 12))
+garchresids <- na.omit(gbench$residuals)
+plot(garchresids, main = "Benchmark Model Residuals Plot")
+acf(garchresids, main = "ACF of GARCH Model Residuals Plot", lag.max = 500)
+pacf(garchresids, main = "PACF of GARCH Model Residuals Plot", lag.max = 500)
 
 # Mean squared error calculation
 actual = as.matrix(aggregate_demand[test_index,1])
@@ -349,7 +360,7 @@ model %>%
   layer_dense(units = 16, activation = "relu") %>%
   layer_dense(units = 1)
 
-# Configure the leanring process
+# Configure the learning process
 model %>% compile(
   loss = "mse",
   optimizer = optimizer_rmsprop(),
@@ -378,7 +389,6 @@ test_label_unscaled <- test_label * attr(aggregate_data_nn$value, 'scaled:scale'
 mse_nn = mean((test_label_unscaled - test_preds)^2)
 
 # Rolling forecast window.
-
 rolling_actual <- aggregate_demand[test_index,2][c(20346:21017)]
 test_roll <- rbind(aggregate_data_nn[test_index,2][c(19674:20345)])
 
