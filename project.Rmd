@@ -337,8 +337,8 @@ model %>%
   layer_dense(units = 16, activation = "relu",
               input_shape = winSize) %>%
   layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dense(units = 64, activation = "relu") %>%
   layer_dense(units = 16, activation = "relu") %>%
   layer_dense(units = 1)
 
@@ -352,7 +352,7 @@ model %>% compile(
 # Train neural network
 history = model %>% fit(
   train_data, train_label,
-  epochs = 20, 
+  epochs = 30, 
   validation_split = 0.2,
   verbose = 0
 )
@@ -361,6 +361,15 @@ history = model %>% fit(
 test_preds = model %>% predict(test_data)
 
 # Evaluate model on test data
-model %>% evaluate(test_data, test_label)
+test_preds = model %>% evaluate(test_data, test_label)
+
+# Rescale predictions
+test_preds <- test_preds * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+test_label_unscaled <- test_label * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
+
+# Calculate test set mean squared error
+mse_nn = mean((test_label_unscaled - test_preds)^2)
+
+# Graphs to come
 
 ```

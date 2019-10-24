@@ -567,8 +567,6 @@ r.model.forecast %>% autoplot(r.aggregate.nogap)
 ```{r}
 respondent_std_aggregate_edit <- respondent_std_aggregate[-c(1:48),]
 respondent_std_aggregate_edit <- respondent_std_aggregate[-c(105087:105135),]
-
-
 respondent_std_aggregate_edit$value <- respondent_std_aggregate_edit$value %>% scale()
 respondent_std_aggregate_edit_train <- respondent_std_aggregate_edit[c(1:(0.8*length(respondent_std_aggregate_edit$value))),]
 respondent_std_aggregate_edit_test <- respondent_std_aggregate_edit[c((0.8*length(respondent_std_aggregate_edit$value)):105134),]
@@ -580,8 +578,8 @@ r.aggregate.mat <- as.matrix(respondent_std_aggregate_edit_train$value)
 r.aggregate.mat.test <- as.matrix(respondent_std_aggregate_edit_test$value)
 
 
-generator <- timeseries_generator(r.aggregate.mat, targets=r.aggregate.mat, length = 672, batch_size = 10)
-generator_test <- timeseries_generator(r.aggregate.mat.test, targets=r.aggregate.mat.test, length = 672, batch_size = 10)
+generator <- timeseries_generator(r.aggregate.mat, targets=r.aggregate.mat, length = 672, batch_size = 70000)
+generator_test <- timeseries_generator(r.aggregate.mat.test, targets=r.aggregate.mat.test, length = 672, batch_size = 15000)
 
 for(i in 1:length(generator)){
   print(generator[i])
@@ -599,26 +597,26 @@ test_label <- gg_test[[2]]
 
 
 FLAGS <- flags(
-  flag_numeric("nodes3", 16),
-  flag_numeric("nodes4", 16),
   flag_numeric("nodes1", 16),
   flag_numeric("nodes2", 16),
+  flag_numeric("nodes3", 16),
+  flag_numeric("nodes4", 16),
   flag_numeric("nodes5", 16),
-  flag_numeric("epochs", 20)
+  flag_numeric("epochs", 50)
   
 )
 
-runs <- tuning_run("keras.R", echo = FALSE, sample = 5/2048, flags = list(
-  nodes1 = c(16,32,64,128),
-  nodes2 = c(16,32,64,128),
-  nodes3 = c(16,32,64,128),
-  nodes4 = c(16,32,64,128),
-  nodes5 = c(16,32,64,128),
-  epochs = c(20, 30)
+runs <- tuning_run("keras.R", echo = FALSE, flags = list(
+  nodes1 = c(16,64,128),
+  nodes2 = c(16,64,128),
+  nodes3 = c(64,128),
+  nodes4 = c(64,128),
+  nodes5 = c(16,64,128),
+  epochs = c(50)
 ))
 
-runs[order(runs$metric_val_loss, decreasing = TRUE), ]
-view_run("runs/2019-10-23T05-27-35Z")
+runs[order(runs$metric_val_loss, decreasing = FALSE), ]
+view_run("runs/2019-10-23T16-36-38Z")
 ```
 
 ```{r}
@@ -629,8 +627,8 @@ model %>%
   layer_dense(units = 16, activation = "relu",
               input_shape = winSize) %>%
   layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dense(units = 64, activation = "relu") %>%
   layer_dense(units = 16, activation = "relu") %>%
   layer_dense(units = 1)
 
@@ -643,58 +641,35 @@ model %>% compile(
 # Train neural network
 history = model %>% fit(
   train_data, train_label,
-  epochs = 20, 
+  epochs = 30, 
   validation_split = 0.2,
   verbose = 0
 )
 
 test_preds = model %>% predict(test_data)
 
-error <- (test_label - test_preds)^2
+test_preds <- test_preds * attr(respondent_std_aggregate_edit$value, 'scaled:scale') + attr(respondent_std_aggregate_edit$value, 'scaled:center')
+test_label_unscaled <- test_label * attr(respondent_std_aggregate_edit$value, 'scaled:scale') + attr(respondent_std_aggregate_edit$value, 'scaled:center')
 
-model %>% evaluate(test_data, test_label)
+
+
+
+error <- (test_label_unscaled - test_preds)^2
+sum(error)/length(error)
+
+error
+ model %>% evaluate(test_data, test_label)
 ```
-
 
 ```{r}
-respondent_list_edit <- lapply(respondent_list, function(x){mutate(x, time = as.character(time))})
+df <- cbind(test_preds, test_label_unscaled)
+df <- data.frame(df) 
+df <- df %>% mutate(index = rownames(df))
 
-respondent_std<- bind_rows(respondent_list_edit, .id = "column_label")
-respondent_std<- respondent_std %>% mutate(time = as.POSIXct(time,format="%Y-%m-%d %H:%M:%S", tz ="America/New_York"))
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=X1, group=1, colour="predictions")) + geom_line(aes(y=X2, group=1, colour="test")) + ylab("Aggregate Load") + theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
 
-respondent_std_aggregate <- respondent_std %>% select(time,value)
-respondent_std_aggregate <- aggregate(respondent_std_aggregate["value"], by=respondent_std_aggregate["time"], sum)
 
-r.aggregate <- as.tsibble(respondent_std_aggregate)
-autoplot(r.aggregate)
-r.aggregate.nogap <- fill_gaps(r.aggregate)
-
-#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
-
-r.model <- r.aggregate.nogap %>% model(ARIMA(value))
-report(r.model)
-
-r.model.forecast <- r.model %>% forecast(h = 8760)
-
-r.model.forecast %>% autoplot(r.aggregate.nogap)
-
-autoplot(r.aggregate.nogap)
-
-r.aggregate <- as.tsibble(respondent_std_aggregate)
-r.aggregate <- r.aggregate[-c(1:50),]
-r.aggregate <- r.aggregate[-c(105073:105133),]
-#removing first and last 50 observations to account for difference in tz.
-
-autoplot(r.aggregate)
-
-r.aggregate.nogap <- fill_gaps(r.aggregate)
-
-#good point to mention, maybe remove first few values and last few values to make up for timezone differences.
-
-r.model <- r.aggregate.nogap %>% model(ARIMA(value))
-report(r.model)
-
-r.model.forecast <- r.model %>% forecast(h = 8810)
-
-r.model.forecast %>% autoplot(r.aggregate.nogap)
 ```
+
