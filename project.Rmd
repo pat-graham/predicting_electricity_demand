@@ -272,7 +272,6 @@ benchmark_forecast = forecast(benchmark_model, h = length(test_index))
 # Plot ARIMA forecast
 ggplot() + 
   geom_line(aes(x = aggregate_demand[test_index,1], y = benchmark_forecast$mean, color = "forecast")) +
-  geom_line(aes(x = aggregate_demand[train_index,1], y = aggregate_demand[train_index,2], color = "train")) +
   geom_line(aes(x = aggregate_demand[test_index,1], y = aggregate_demand[test_index,2], color = "test"), alpha = 1/2) +
   xlab("Year") + ylab("Aggregate Demand MhW") + ggtitle("ARIMA Performance on Test Set with Real Outcome") +
   theme(plot.title = element_text(hjust = 0.5))
@@ -307,11 +306,11 @@ col_stddev <- attr(aggregate_data_nn$value, "scaled:scale") # extract scaling st
 
 # Extract training and test data
 train_data = aggregate_data_nn[train_index,]
-test_data = aggregate_data_nn[test_index,]
+#test_data = aggregate_data_nn[test_index,]
 
 # Convert input data vector to matrix form
-generator_train <- timeseries_generator(data = as.matrix(train_data$value), targets = as.matrix(train_data$value), length = 672, batch_size = 10)
-generator_test <- timeseries_generator(data = as.matrix(test_data$value), targets = as.matrix(test_data$value), length = 672, batch_size = 10)
+generator_train <- timeseries_generator(data = as.matrix(train_data$value), targets = as.matrix(train_data$value), length = 672, batch_size = 10000)
+#generator_test <- timeseries_generator(data = as.matrix(test_data$value), targets = as.matrix(test_data$value), length = 672, batch_size = 10000)
 
 # Create training data
 generator_output_tr = generator_train[[1]]
@@ -319,9 +318,9 @@ train_data = generator_output_tr[[1]] %>% drop()
 train_label = generator_output_tr[[2]]
 
 # Create testing data
-generator_output_ts = generator_test[[1]]
-test_data = generator_output_ts[[1]] %>% drop()
-test_label = generator_output_ts[[2]]
+#generator_output_ts = generator_test[[1]]
+#test_data = generator_output_ts[[1]] %>% drop()
+#test_label = generator_output_ts[[2]]
 
 # Setup flags for tfruns -> this indicates which hyperparameters will be swept across to find the best neural network
 FLAGS <- flags(
@@ -341,7 +340,7 @@ runs <- tuning_run("keras.R", echo = FALSE, sample = 5/2048, flags = list(
   nodes3 = c(16,32,64,128),
   nodes4 = c(16,32,64,128),
   nodes5 = c(16,32,64,128),
-  epochs = c(20, 30)
+  epochs = c(30)
 ))
 
 # Store results
@@ -357,10 +356,11 @@ model %>%
   layer_dense(units = 16, activation = "relu",
               input_shape = winSize) %>%
   layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
-  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dense(units = 64, activation = "relu") %>%
   layer_dense(units = 16, activation = "relu") %>%
   layer_dense(units = 1)
+
 
 # Configure the leanring process
 model %>% compile(
@@ -372,7 +372,7 @@ model %>% compile(
 # Train neural network
 history = model %>% fit(
   train_data, train_label,
-  epochs = 20, 
+  epochs = 30, 
   validation_split = 0.2,
   verbose = 0
 )
@@ -387,34 +387,40 @@ model %>% evaluate(test_data, test_label)
 
 ```{r Forecasting NN}
 # Rolling forecast window.
+test_index2 = seq(from = round(0.8*nrow(aggregate_demand)) + 1, to = nrow(aggregate_demand), by = 1)
+#set index to the previous index used so i dont have to change subsequent code
 
-rolling_actual <- aggregate_demand[test_index,2][c(20346:21017)]
-test_roll <- rbind(aggregate_data_nn[test_index,2][c(19674:20345)])
+rolling_actual <- aggregate_demand[test_index2,2][c(20346:21017)] #actual values for the last month
+test_roll <- rbind(aggregate_data_nn[test_index2,2][c(19674:20345)]) #set up inputs for rolling frame
 
 rolling.fc <- vector("numeric", 672)
 
 for(i in 1:672){
-    predict <- model %>% predict(test_roll)
-  test_roll <- cbind(test_roll,predict)
-  test_roll <- rbind(test_roll[c(2:673)])
+    predict <- model %>% predict(test_roll) #predict using inputs
+  test_roll <- cbind(test_roll,predict) #bind prediction to the rolling frame 672->673
+  test_roll <- rbind(test_roll[c(2:673)]) #chop off the first observation 673->672
 
   
-  rolling.fc[i] <- predict
+  rolling.fc[i] <- predict #record prediction at that step
 }
 
-rolling.fc.scaled <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center')
-rolling.fc.scaled <- rbind(rolling.fc.scaled)
+rolling.fc.scaled <- rolling.fc * attr(aggregate_data_nn$value, 'scaled:scale') + attr(aggregate_data_nn$value, 'scaled:center') #unscale the predictions
 
+#create dataframe for ggplot.
 df <- cbind(rolling.fc.scaled, rolling_actual)
 df <- data.frame(df) 
 df <- df %>% mutate(index = rownames(df))
 
 
-
+#calculate mean squared error - MAE would be better but too late....
 rolling.mse <- mean((df$rolling_actual - df$rolling.fc.scaled)^2)
 # Graphs to come
 
-df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc.scaled, group=1, colour="predictions")) + geom_line(aes(y=rolling_actual, group=1, colour="test")) + ylab("Aggregate Load") + theme(
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc.scaled, group=1, colour="neural net")) + geom_line(aes(y=rolling_actual, group=1, colour="test")) + geom_line(aes(y = benchmark_forecast$mean,group=1, colour = "ARIMA")) + ylab("Aggregate Load") + theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+df %>% ggplot(aes(x=index)) + geom_line(aes(y=rolling.fc.scaled, group=1, colour="neural net")) + geom_line(aes(y=rolling_actual, group=1, colour="test"))  + ylab("Aggregate Load") + theme(
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 ```
