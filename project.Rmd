@@ -14,6 +14,7 @@ library(keras)
 library(tensorflow)
 library(lmtest)
 library(purrr)
+library(tseries)
 library(xts)
 library(FinTS)
 library(forecast)
@@ -251,17 +252,21 @@ acf(aggregate_demand_ts, lag.max = 24) #ACF for one day
 acf(aggregate_demand_ts, lag.max = 7 * 24) # ACF for one week 
 acf(aggregate_demand_ts, lag.max = 7 * 24 * 31) # ACF for one month
 
+month <- 24 * 28 
+
 # Decompose into seasonality and trend, plot the results
 aggregate_components <- decompose(aggregate_demand_ts) 
 plot(aggregate_components) 
 
 # Define training, Test and test
-train_index = seq(from = 1, to = round(0.8*nrow(aggregate_demand)), by = 1)
-test_index = seq(from = round(0.8*nrow(aggregate_demand)) + 1, to = nrow(aggregate_demand), by = 1)
+train_index = seq(from = 1, to = (nrow(aggregate_demand)-month), by = 1)
+test_index = seq(from = (nrow(aggregate_demand)-month) + 1, to = nrow(aggregate_demand), by = 1)
 
 # Fit ARIMA model and forecast
 benchmark_model = auto.arima(aggregate_demand_ts[train_index], D=1)
-acf(benchmark_model$residuals, main = "Benchmark Model Residuals Plot")
+acf(benchmark_model$residuals, main = "ACF of ARIMA Model Residuals Plot")
+pacf(benchmark_model$residuals, main = "PACF of ARIMA Model Residuals Plot")
+plot(benchmark_model$residuals, main = "visualisation of residuals for ARIMA")
 benchmark_forecast = forecast(benchmark_model, h = length(test_index))
 
 # Plot ARIMA forecast
@@ -287,8 +292,9 @@ archeffects = ArchTest(benchmark_model$residuals, lags = 12)
 
 gbench = garch(aggregate_demand_ts, order = c(12, 12))
 garchresids <- na.omit(gbench$residuals)
-acf(garchresids, main = "Benchmark Model Residuals Plot", lag.max = 500)
-
+plot(garchresids, main = "Benchmark Model Residuals Plot")
+acf(garchresids, main = "ACF of GARCH Model Residuals Plot", lag.max = 500)
+pacf(garchresids, main = "PACF of GARCH Model Residuals Plot", lag.max = 500)
 ```
 
 ```{r Fitting a Neural Network Model}
